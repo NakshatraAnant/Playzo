@@ -175,7 +175,7 @@ export function recordCompletion(c: CompletionInput): CompletionOutput {
     bumpMissions(c.userId, { gameId: c.gameId, score: c.score, won: c.won, vsAi: c.vsAi, multiplayer: c.multiplayer, daily: c.context === 'daily', newGame, challenge: c.context === 'challenge', category: meta.category });
     // Achievements
     const plays = db().get<{ n: number; g: number }>('SELECT SUM(plays) AS n, COUNT(*) AS g FROM game_stats WHERE user_id = ?', c.userId)!;
-    const tryU = (id: string, cond: boolean) => { if (cond && unlock(c.userId, id)) out.achievements.push(id); };
+    const tryU = (id: string, cond: boolean) => { if (cond && unlock(c.userId, id)) out.achievements.push(ACHIEVEMENTS.find((a) => a.id === id)?.title ?? id); };
     tryU('first_game', plays.n >= 1);
     tryU('ten_games', plays.n >= 10);
     tryU('fifty_games', plays.n >= 50);

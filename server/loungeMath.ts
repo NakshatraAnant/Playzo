@@ -36,10 +36,10 @@ export function loungeMath(id: string): Record<string, unknown> | null {
     case 'crash-flight': return { kind: 'crash', rule: 'P(stall >= m) = 0.98/m. Multiplier(t) = e^(g t).', growthPerMs: GROWTH, rtp: 98 };
     case 'baccarat': return { kind: 'table', bets: [{ bet: 'Banker (0.95:1)', rtp: 98.94 }, { bet: 'Player (1:1)', rtp: 98.76 }, { bet: 'Tie (8:1)', rtp: 85.64 }], source: 'Standard 8-deck Punto Banco results; verified by simulation in tests.' };
     case 'dragon-tiger': return { kind: 'table', bets: [{ bet: 'Dragon / Tiger (1:1, half back on tie)', rtp: 96.27 }, { bet: 'Tie (8:1)', rtp: 89.64 }], source: '8-deck values; verified by simulation in tests.' };
-    case 'andar-bahar': return { kind: 'table', bets: [{ bet: `Andar (${AB_PAYS.andar - 1}:1)` }, { bet: `Bahar (${AB_PAYS.bahar - 1}:1)` }], rtp: 'approximately 97-98% per side; measured by simulation in tests (see QA_TEST_REPORT.md)' };
+    case 'andar-bahar': return { kind: 'table', bets: [{ bet: `Andar (${(AB_PAYS.andar - 1).toFixed(1)}:1)` }, { bet: `Bahar (${(AB_PAYS.bahar - 1).toFixed(0)}:1)` }], rtp: 'approximately 97-98% per side; measured by simulation in tests (see QA_TEST_REPORT.md)' };
     case 'blackjack': return { kind: 'table', rules: '6 decks, S17, 3:2, DAS, one split, peek', rtp: 'about 99.5% with basic strategy (simulation in tests)' };
     case 'blackjack-duel': return { kind: 'table', rules: 'Rival hits below 17. Both bust = push. Natural 21 pays 3:2.', rtp: 'depends on decisions; simulation for a hit-below-17 strategy in tests' };
-    case 'three-card-poker': return { kind: 'table', anteBonus: ANTE_BONUS, pairPlus: PAIR_PLUS, rtp: 'Ante/Play ~96.6% (Q-6-4 strategy); Pair Plus ~97.7%' };
+    case 'three-card-poker': return { kind: 'table', anteBonus: ANTE_BONUS, pairPlus: PAIR_PLUS, rtp: 'Ante/Play ~97.98% per unit wagered with Q-6-4 strategy; Pair Plus ~97.7%' };
     case 'video-poker': return { kind: 'vp', paytable: VP_TABLE, royalAtMax: 800, rtp: 99.54, note: '99.54% requires optimal hold strategy at 5 coins' };
     case 'holdem': case 'omaha': case 'teen-patti': return { kind: 'pvp', rtp: null, note: 'Player-versus-bot table with no rake. Bots use documented strategies and never see your cards.' };
   }

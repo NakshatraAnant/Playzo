@@ -13,7 +13,7 @@ export function binom(n: number, k: number): number {
   return r;
 }
 const shape = (risk: Risk, d: number) => (risk === 'low' ? 0.5 + 0.14 * Math.pow(d, 1.5) : risk === 'medium' ? 0.3 + 0.05 * Math.pow(d, 2.6) : 0.12 + 0.012 * Math.pow(d, 3.6));
-const round = (x: number) => (x >= 10 ? Math.round(x) : x >= 1 ? Math.round(x * 10) / 10 : Math.round(x * 100) / 100);
+const round = (x: number) => (x >= 100 ? Math.round(x) : x >= 10 ? Math.round(x * 10) / 10 : Math.round(x * 100) / 100);
 
 /** Multiplier tables, normalised to 98% then rounded. Exact RTP after rounding is reported by plinkoRtp(). */
 export const PLINKO_TABLES: Record<string, number[]> = {};

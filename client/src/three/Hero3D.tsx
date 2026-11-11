@@ -24,7 +24,7 @@ export default function Hero3D({ className }: { className?: string }) {
 
     const orb = new THREE.Mesh(
       new THREE.IcosahedronGeometry(1.35, 5),
-      new THREE.MeshPhysicalMaterial({ color: 0x2a0f5a, metalness: 0.35, roughness: 0.18, clearcoat: 1, clearcoatRoughness: 0.08, iridescence: 0.6, iridescenceIOR: 1.6, emissive: 0x3a0a3a, emissiveIntensity: 0.25 }),
+      new THREE.MeshPhysicalMaterial({ color: 0x6a2ab8, metalness: 0.25, roughness: 0.16, clearcoat: 1, clearcoatRoughness: 0.06, iridescence: 0.8, iridescenceIOR: 1.7, emissive: 0x7a1a6a, emissiveIntensity: 0.45 }),
     );
     const ring = new THREE.Mesh(new THREE.TorusGeometry(2.05, 0.11, 32, 180), new THREE.MeshStandardMaterial({ color: 0xff7a3d, metalness: 0.6, roughness: 0.25, emissive: 0xff3d8b, emissiveIntensity: 0.55 }));
     ring.rotation.x = Math.PI / 2.6;
@@ -59,9 +59,12 @@ export default function Hero3D({ className }: { className?: string }) {
       renderer.setSize(w, h, false);
       camera.aspect = w / h;
       camera.updateProjectionMatrix();
-      const narrow = w < 640;
-      group.position.set(narrow ? 1.1 : 2.3, narrow ? 0.9 : 0.1, 0);
-      group.scale.setScalar(narrow ? 0.7 : 1);
+      // Keep the orb in the right third of the hero, clear of the headline.
+      const halfW = Math.tan((camera.fov * Math.PI) / 360) * camera.position.z * camera.aspect;
+      const narrow = camera.aspect < 1.25;
+      const scale = narrow ? 0.62 : Math.min(1, halfW / 4.6);
+      group.scale.setScalar(scale);
+      group.position.set(narrow ? halfW * 0.55 : halfW - 2.25 * scale, narrow ? 1.35 : 0.05, 0);
     };
     resize();
     const ro = new ResizeObserver(resize);

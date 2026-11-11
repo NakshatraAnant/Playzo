@@ -126,7 +126,7 @@ export function Results({ meta, score, completion, verified, result, onReplay, e
           {completion.leveledUp && <span className="reward pop-in" style={{ borderColor: 'var(--zo-saffron)' }}><Icon name="crown" />Level {completion.level}!</span>}
         </div>
       )}
-      {completion?.achievements?.map((a) => <Chip key={a} tone="on" icon="trophy">Achievement unlocked: {a.replace(/_/g, ' ')}</Chip>)}
+      {completion?.achievements?.map((a) => <Chip key={a} tone="on" icon="trophy">Achievement unlocked: {a}</Chip>)}
       {extra}
       <div className="row wrap" style={{ justifyContent: 'center', marginTop: 8 }}>
         <button className="btn btn-primary btn-lg" onClick={onReplay}><Icon name="refresh" />Play again</button>

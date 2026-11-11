@@ -125,12 +125,12 @@ export const CATALOGUE: GameMeta[] = [
     description: 'A three-dice table with small/big, totals, doubles and triples, with 3D dice tumbling in a glass shaker.',
     usp: 'Every bet shows its exact probability from the 216 possible dice outcomes.',
     loop: 'Place bets -> shake -> dice reveal -> settle.',
-    rules: ['Small (4-10) / Big (11-17) pay 1:1 and lose on any triple.', 'Specific total pays by rarity (e.g. 4 or 17 pay 50:1).', 'Specific double 8:1, any triple 24:1, specific triple 150:1.'],
+    rules: ['Small (4-10) / Big (11-17) pay 1:1 and lose on any triple.', 'Specific totals pay by rarity, from 6:1 (9-12) to 60:1 (4 or 17).', 'Specific double 10:1, any triple 30:1, specific triple 150:1, single number 1-3:1.'],
     tutorial: ['Pick chips and tap bets on the layout.', 'Shake to roll three dice.', 'Tap any bet to see its probability.'],
     controls: 'Tap layout cells; Roll; Clear / Rebet.', scoring: 'Fun Chips only.', formats: ['solo'], maxPlayers: 1, session: '2-10 min',
     theme: { world: 'Lantern Dice', bg: ['#3b0a06', '#120403'], accent: '#ffb547' },
     a11y: ['Dice values shown as numbers'], tags: ['dice'],
-    math: 'Small/Big 97.22%; totals 83-91%; any triple 86.11%; specific triple 69.91%.',
+    math: 'Small/Big 97.22%; totals 81-90%; any triple 86.11%; specific double 81.48%; specific triple 69.91%.',
   },
   {
     n: 8, id: 'holdem', title: "Texas Hold'em Social", env: LNG, category: 'Card & Social', age: '18+',
@@ -208,7 +208,7 @@ export const CATALOGUE: GameMeta[] = [
     controls: 'Ante, Pair Plus, Deal, Play, Fold.', scoring: 'Fun Chips only.', formats: ['solo'], maxPlayers: 1, session: '3-10 min',
     theme: { world: 'Triad Table', bg: ['#0b2a1c', '#06120c'], accent: '#7ee0a1' },
     a11y: ['Hand names as text'], tags: ['poker'],
-    math: 'Ante/Play ~96.6% with Q-6-4 strategy; Pair Plus ~97.7%.',
+    math: 'Ante/Play ~97.98% per unit wagered with Q-6-4 strategy (3.37% ante edge); Pair Plus ~97.7%.',
   },
   {
     n: 14, id: 'video-poker', title: 'Video Poker', env: LNG, category: 'Card & Social', age: '18+',
@@ -306,7 +306,7 @@ export const CATALOGUE: GameMeta[] = [
     tutorial: ['Choose rows and risk.', 'Drop the ball.', 'Tap a slot to see its probability.'],
     controls: 'Rows, Risk, Bet, Drop.', scoring: 'Fun Chips only.', formats: ['solo'], maxPlayers: 1, session: '1-10 min',
     theme: { world: 'Peg Cascade', bg: ['#071a3d', '#020714'], accent: '#4dd2ff' },
-    a11y: ['Result slot in text'], tags: ['instant'], math: 'RTP 98% for every row/risk table (exact).',
+    a11y: ['Result slot in text'], tags: ['instant'], math: 'Tables normalised to 98%; exact RTP after rounding is 97.76-98.19% and published per table.',
   },
   {
     n: 22, id: 'dice-arena', title: 'Dice Arena', env: LNG, category: 'Instant', age: '18+',

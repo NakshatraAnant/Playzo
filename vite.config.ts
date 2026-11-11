@@ -8,7 +8,7 @@ export default defineConfig({
   root: 'client',
   publicDir: 'public',
   plugins: [react()],
-  resolve: { alias: { '@shared': path.resolve(__dirname, 'shared') } },
+  resolve: { alias: { '@shared': path.resolve(import.meta.dirname, 'shared') } },
   server: {
     port: Number(process.env.PLAYZO_WEB_PORT ?? 5757),
     strictPort: true,

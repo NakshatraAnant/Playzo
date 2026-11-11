@@ -138,6 +138,7 @@ p { margin: 0; }
 .rail-x > * { scroll-snap-align: start; }
 @media (min-width: 768px) { .rail-x { grid-auto-columns: minmax(170px, 24%); } }
 @media (min-width: 1200px) { .rail-x { grid-auto-columns: minmax(180px, 18%); } }
+@media (min-width: 1024px) { .rail-x { margin: 0; padding-left: 0; padding-right: 0; } }
 .grid-games { display: grid; grid-template-columns: repeat(2, 1fr); gap: var(--s-3); }
 @media (min-width: 600px) { .grid-games { grid-template-columns: repeat(3, 1fr); } }
 @media (min-width: 900px) { .grid-games { grid-template-columns: repeat(4, 1fr); gap: var(--s-4); } }
@@ -205,7 +206,9 @@ p { margin: 0; }
 .hero { position: relative; border-radius: var(--r-xl); overflow: hidden; min-height: 280px; padding: var(--s-8) var(--s-6); display: flex; flex-direction: column; justify-content: flex-end; gap: var(--s-4); isolation: isolate;
   background: radial-gradient(120% 120% at 100% 0%, rgba(255, 61, 139, 0.35), transparent 50%), radial-gradient(100% 100% at 0% 100%, rgba(139, 92, 255, 0.35), transparent 55%), linear-gradient(160deg, #1c1140, #0b0720);
   border: 1px solid var(--line-2); box-shadow: var(--sh-2); }
-.hero canvas.hero-3d, .hero .hero-art { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; }
+.hero canvas.hero-3d, .hero .hero-art { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -2; }
+.hero::before { content: ''; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: linear-gradient(90deg, rgba(12,7,32,.78) 0%, rgba(12,7,32,.45) 48%, transparent 72%); }
+@media (max-width: 640px) { .hero::before { background: linear-gradient(0deg, rgba(12,7,32,.9) 0%, rgba(12,7,32,.55) 55%, transparent 80%); } }
 .hero .tagline { font-family: var(--font-display); font-size: clamp(1.7rem, 1.1rem + 3.4vw, 3.2rem); font-weight: 900; line-height: 1.02; max-width: 15ch; letter-spacing: -0.03em; }
 @media (min-width: 900px) { .hero { min-height: 360px; padding: var(--s-12); } }
 

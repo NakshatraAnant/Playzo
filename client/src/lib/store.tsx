@@ -39,6 +39,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const r = await api.get<{ user: Me | null; providers: Providers }>('/api/auth/me');
       setMe(r.user);
       setProviders(r.providers);
+    } catch {
+      /* API unreachable (e.g. still starting): stay signed-out, retry shortly */
+      setTimeout(() => { api.get<{ user: Me | null; providers: Providers }>('/api/auth/me').then((r) => { setMe(r.user); setProviders(r.providers); }).catch(() => undefined); }, 2500);
     } finally { setReady(true); }
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
