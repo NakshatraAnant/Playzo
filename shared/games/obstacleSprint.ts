@@ -82,7 +82,7 @@ export const obstacleSprint: Engine<SprintState, SprintAction> = {
     return s;
   },
   apply(s, a, ctx) {
-    if (s.over) throw new GameError('Run is over');
+    if (s.over) { if (a.a === 'end') return s; throw new GameError('Run is over'); }
     const target = Math.round(ctx.now / FRAME_MS);
     if (target < s.frame) throw new GameError('Out of order', 'IMPLAUSIBLE');
     while (s.frame < target && !s.dead) stepFrame(s);

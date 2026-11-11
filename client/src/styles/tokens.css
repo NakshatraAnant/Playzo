@@ -1,0 +1,91 @@
+/* =====================================================================
+   PLAYZO DESIGN TOKENS
+   Brand: deep midnight + the "Zo gradient" (magenta -> ember -> saffron)
+   with electric cyan as the cool counterpoint.
+   ===================================================================== */
+:root {
+  /* Surfaces */
+  --bg-0: #07040f;
+  --bg-1: #0d0820;
+  --bg-2: #160f30;
+  --bg-3: #20173f;
+  --surface: rgba(255, 255, 255, 0.045);
+  --surface-2: rgba(255, 255, 255, 0.075);
+  --surface-3: rgba(255, 255, 255, 0.11);
+  --glass: rgba(22, 15, 48, 0.62);
+  --line: rgba(255, 255, 255, 0.09);
+  --line-2: rgba(255, 255, 255, 0.16);
+
+  /* Text (WCAG AA on --bg-1: text 16.4:1, text-2 9.1:1, text-3 5.0:1) */
+  --text: #f6f3ff;
+  --text-2: #c3bbe6;
+  --text-3: #8f86bd;
+
+  /* Brand */
+  --zo-magenta: #ff3d8b;
+  --zo-ember: #ff7a3d;
+  --zo-saffron: #ffb02e;
+  --zo-cyan: #3dd9ff;
+  --zo-violet: #8b5cff;
+  --grad-zo: linear-gradient(120deg, #ff3d8b 0%, #ff7a3d 52%, #ffb02e 100%);
+  --grad-cool: linear-gradient(120deg, #8b5cff 0%, #3dd9ff 100%);
+  --grad-lounge: linear-gradient(120deg, #d8b45a 0%, #f6e3a6 50%, #b8892f 100%);
+
+  /* Semantic */
+  --ok: #3ddc97;
+  --warn: #ffb547;
+  --bad: #ff4d6d;
+  --info: #3dd9ff;
+
+  /* Typography */
+  --font-display: 'Unbounded', 'Segoe UI', system-ui, sans-serif;
+  --font-body: 'Plus Jakarta Sans', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --fs-xs: 0.75rem;
+  --fs-sm: 0.875rem;
+  --fs-md: 1rem;
+  --fs-lg: 1.125rem;
+  --fs-xl: 1.375rem;
+  --fs-2xl: clamp(1.5rem, 1.2rem + 1.4vw, 2.1rem);
+  --fs-3xl: clamp(2rem, 1.4rem + 3vw, 3.4rem);
+
+  /* Spacing (4px grid) */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 20px; --s-6: 24px; --s-8: 32px; --s-10: 40px; --s-12: 48px; --s-16: 64px;
+
+  /* Radii */
+  --r-xs: 8px; --r-sm: 12px; --r-md: 18px; --r-lg: 24px; --r-xl: 32px; --r-pill: 999px;
+
+  /* Elevation */
+  --sh-1: 0 1px 0 rgba(255, 255, 255, 0.06) inset, 0 6px 18px rgba(0, 0, 0, 0.35);
+  --sh-2: 0 1px 0 rgba(255, 255, 255, 0.08) inset, 0 16px 40px rgba(0, 0, 0, 0.45);
+  --sh-glow: 0 0 0 1px rgba(255, 61, 139, 0.35), 0 10px 40px rgba(255, 61, 139, 0.28);
+
+  /* Motion */
+  --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --t-fast: 140ms;
+  --t-med: 260ms;
+  --t-slow: 520ms;
+
+  /* Layout */
+  --topbar-h: 60px;
+  --tabbar-h: 68px;
+  --rail-w: 232px;
+  --content-max: 1280px;
+  --gutter: 16px;
+
+  /* Breakpoints (reference): 360 / 390 / 430 phone, 768 tablet, 1024 laptop, 1366 / 1440 desktop */
+  color-scheme: dark;
+}
+@media (min-width: 768px) { :root { --gutter: 24px; } }
+@media (min-width: 1024px) { :root { --gutter: 32px; } }
+
+/* Equipped themes swap the atmosphere only. */
+[data-theme='theme-aurora'] { --bg-0: #030d10; --bg-1: #061a1e; --bg-2: #0b2a2f; --zo-magenta: #3dffc0; --grad-zo: linear-gradient(120deg, #3dffc0, #3dd9ff 55%, #8b5cff); }
+[data-theme='theme-sunset'] { --bg-0: #0f0604; --bg-1: #1a0a06; --bg-2: #2a120b; --grad-zo: linear-gradient(120deg, #ff3d6e, #ff8a3d 50%, #ffd23f); }
+[data-theme='theme-ocean'] { --bg-0: #01060f; --bg-1: #020b1a; --bg-2: #06173a; --zo-magenta: #3d8bff; --grad-zo: linear-gradient(120deg, #3d8bff, #3dd9ff 60%, #a6f0ff); }
+[data-theme='theme-royal'] { --bg-0: #0b0214; --bg-1: #12041f; --bg-2: #1f0a35; --grad-zo: linear-gradient(120deg, #ffcf33, #ff7a3d 50%, #ff3d8b); }
+
+@media (prefers-reduced-motion: reduce) {
+  :root { --t-fast: 1ms; --t-med: 1ms; --t-slow: 1ms; }
+}

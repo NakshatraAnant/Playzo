@@ -1,0 +1,10 @@
+{
+  "name": "PLAYZO",
+  "short_name": "PLAYZO",
+  "description": "Aaja PLAYZO pe khelte hain! 25 original social games.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#07040f",
+  "theme_color": "#07040f",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }]
+}

@@ -1,0 +1,116 @@
+import { StrictMode, lazy, Component, ReactNode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { createBrowserRouter, RouterProvider, Link } from 'react-router-dom';
+import './styles/app.css';
+import { StoreProvider } from './lib/store';
+import { Shell } from './components/Shell';
+import { Intro } from './components/Intro';
+import { reportError } from './lib/api';
+import { Empty } from './components/ui';
+
+const Home = lazy(() => import('./pages/Home'));
+const D = () => import('./pages/Discover');
+const Discover = lazy(() => D().then((m) => ({ default: m.Discover })));
+const GameDetail = lazy(() => D().then((m) => ({ default: m.GameDetail })));
+const Daily = lazy(() => D().then((m) => ({ default: m.Daily })));
+const Leaderboards = lazy(() => D().then((m) => ({ default: m.Leaderboards })));
+const P = () => import('./pages/Play');
+const Play = lazy(() => P().then((m) => ({ default: m.Play })));
+const Challenge = lazy(() => P().then((m) => ({ default: m.Challenge })));
+const Rooms = lazy(() => P().then((m) => ({ default: m.Rooms })));
+const Room = lazy(() => P().then((m) => ({ default: m.Room })));
+const A = () => import('./pages/Account');
+const Login = lazy(() => A().then((m) => ({ default: m.Login })));
+const Register = lazy(() => A().then((m) => ({ default: m.Register })));
+const Welcome = lazy(() => A().then((m) => ({ default: m.Welcome })));
+const Forgot = lazy(() => A().then((m) => ({ default: m.Forgot })));
+const Reset = lazy(() => A().then((m) => ({ default: m.Reset })));
+const Verify = lazy(() => A().then((m) => ({ default: () => <m.TokenAction kind="verify" /> })));
+const ParentConsent = lazy(() => A().then((m) => ({ default: () => <m.TokenAction kind="parent" /> })));
+const Settings = lazy(() => A().then((m) => ({ default: m.Settings })));
+const DevOutbox = lazy(() => A().then((m) => ({ default: m.DevOutbox })));
+const S = () => import('./pages/Social');
+const Me = lazy(() => S().then((m) => ({ default: m.Me })));
+const PublicProfile = lazy(() => S().then((m) => ({ default: m.PublicProfile })));
+const Friends = lazy(() => S().then((m) => ({ default: m.Friends })));
+const Missions = lazy(() => S().then((m) => ({ default: m.Missions })));
+const Shop = lazy(() => S().then((m) => ({ default: m.Shop })));
+const L = () => import('./pages/Lounge');
+const Lounge = lazy(() => L().then((m) => ({ default: m.Lounge })));
+const LoungeGame = lazy(() => L().then((m) => ({ default: m.LoungeGame })));
+const LoungePlay = lazy(() => L().then((m) => ({ default: m.LoungePlay })));
+const Admin = lazy(() => import('./pages/Admin'));
+const Legal = lazy(() => import('./pages/Legal'));
+
+class Boundary extends Component<{ children: ReactNode }, { err: Error | null }> {
+  state = { err: null as Error | null };
+  static getDerivedStateFromError(err: Error) { return { err }; }
+  componentDidCatch(err: Error) { reportError(String(err?.message ?? err), location.pathname); }
+  render() {
+    if (this.state.err) {
+      const chunk = /dynamically imported module|Failed to fetch/i.test(this.state.err.message);
+      return (
+        <div className="empty panel" style={{ maxWidth: 520, margin: '10vh auto' }}>
+          <h3 style={{ marginBottom: 8 }}>{chunk ? 'A new version is available' : 'Something went wrong'}</h3>
+          <p className="muted" style={{ marginBottom: 16 }}>{chunk ? 'Reload to get the latest PLAYZO.' : 'The error was reported. You can reload or head home.'}</p>
+          <button className="btn btn-primary" onClick={() => location.reload()}>Reload</button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+const NotFound = () => <Empty icon="compass" title="Page not found"><Link to="/" className="btn btn-primary" style={{ marginTop: 12 }}>Go home</Link></Empty>;
+
+const router = createBrowserRouter([
+  {
+    element: <Shell />,
+    errorElement: <Boundary><NotFound /></Boundary>,
+    children: [
+      { path: '/', element: <Home /> },
+      { path: '/games', element: <Discover /> },
+      { path: '/games/:id', element: <GameDetail /> },
+      { path: '/play/:id', element: <Play /> },
+      { path: '/daily', element: <Daily /> },
+      { path: '/leaderboards', element: <Leaderboards /> },
+      { path: '/rooms', element: <Rooms /> },
+      { path: '/room/:code', element: <Room /> },
+      { path: '/challenge/:id', element: <Challenge /> },
+      { path: '/missions', element: <Missions /> },
+      { path: '/me', element: <Me /> },
+      { path: '/u/:id', element: <PublicProfile /> },
+      { path: '/friends', element: <Friends /> },
+      { path: '/shop', element: <Shop /> },
+      { path: '/settings', element: <Settings /> },
+      { path: '/login', element: <Login /> },
+      { path: '/register', element: <Register /> },
+      { path: '/welcome', element: <Welcome /> },
+      { path: '/forgot', element: <Forgot /> },
+      { path: '/reset', element: <Reset /> },
+      { path: '/verify', element: <Verify /> },
+      { path: '/parent-consent', element: <ParentConsent /> },
+      { path: '/dev/outbox', element: <DevOutbox /> },
+      { path: '/lounge', element: <Lounge /> },
+      { path: '/lounge/:id', element: <LoungeGame /> },
+      { path: '/lounge/play/:id', element: <LoungePlay /> },
+      { path: '/admin', element: <Admin /> },
+      { path: '/legal/:doc', element: <Legal /> },
+      { path: '*', element: <NotFound /> },
+    ],
+  },
+]);
+
+window.addEventListener('error', (e) => reportError(String(e.message), 'window'));
+window.addEventListener('unhandledrejection', (e) => { const m = String((e.reason as any)?.message ?? e.reason); if (!/abort/i.test(m)) reportError(m, 'promise'); });
+
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <StoreProvider>
+      <Boundary>
+        <Intro />
+        <RouterProvider router={router} />
+      </Boundary>
+    </StoreProvider>
+  </StrictMode>,
+);
