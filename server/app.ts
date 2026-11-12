@@ -17,6 +17,7 @@ import { adminRoutes } from './admin';
 import { notifyRoutes } from './notify';
 import { rewardRoutes } from './rewards';
 import { retryDueEmails, emailStatus } from './email';
+import { startAutoBackups, latestBackup } from './backup';
 import { seoRoutes } from './seo';
 import { seed } from './seed';
 import { ENGINES } from './games/registry';
@@ -64,7 +65,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     ok: true, service: 'playzo-api', time: new Date().toISOString(),
     db: !!db().get('SELECT 1 AS ok'), migrations: db().all('SELECT name FROM schema_migrations').map((r: any) => r.name),
     engines: Object.keys(ENGINES).length, dictionary: dictionarySize(), devMode: config.devMode, production: config.production,
-    uptimeSec: Math.round(process.uptime()), email: emailStatus().provider, emailConfigured: emailStatus().configured, loungeEnabled: config.loungeEnabled,
+    uptimeSec: Math.round(process.uptime()), lastBackup: latestBackup() ? new Date(latestBackup()!.at).toISOString() : null, email: emailStatus().provider, emailConfigured: emailStatus().configured, loungeEnabled: config.loungeEnabled,
   }));
 
   await app.register(authRoutes);
@@ -81,19 +82,30 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
 
   // Production: serve the built SPA + prerendered SEO pages.
   const dist = path.resolve('dist');
-  const serveDist = config.production && fs.existsSync(dist);
+  // Production, or the optimised local mode (`npm run local`), serves the built app from this process.
+  const serveDist = (config.production || config.serveDist) && fs.existsSync(path.join(dist, 'index.html'));
   // Built sites ship static sitemap.xml/robots.txt (scripts/prerender-seo.ts); otherwise serve them dynamically.
   if (!serveDist) await app.register(seoRoutes);
   if (serveDist) {
-    await app.register(fastifyStatic, { root: dist, wildcard: false, maxAge: '1h', preCompressed: true });
+    await app.register(fastifyStatic, {
+      root: dist, wildcard: false, preCompressed: true, cacheControl: false,
+      setHeaders: (res, file) => {
+        // Hashed build assets never change: cache for a year. Pages and the service worker: always revalidate.
+        res.header('Cache-Control', /[\\/]assets[\\/]/.test(file) ? 'public, max-age=31536000, immutable' : 'no-cache');
+      },
+    });
     app.setNotFoundHandler((req, reply) => {
-      const p = path.join(dist, req.url.split('?')[0], 'index.html');
-      if (p.startsWith(dist) && fs.existsSync(p)) return reply.type('text/html').send(fs.readFileSync(p));
-      return reply.type('text/html').send(fs.readFileSync(path.join(dist, 'index.html')));
+      const urlPath = req.url.split('?')[0];
+      // Missing files are real 404s; only page routes fall back to the app shell.
+      if (urlPath.startsWith('/assets/') || /\.[a-z0-9]{2,5}$/i.test(urlPath)) return reply.code(404).type('text/plain').send('Not found');
+      const p = path.join(dist, urlPath, 'index.html');
+      const file = p.startsWith(dist) && fs.existsSync(p) ? p : path.join(dist, 'index.html');
+      return reply.header('Cache-Control', 'no-cache').type('text/html').send(fs.readFileSync(file));
     });
   }
 
   setInterval(() => { try { reapSessions(); } catch (e) { console.error('[reaper]', e); } }, 10 * 60_000).unref();
   setInterval(() => { try { retryDueEmails(); } catch (e) { console.error('[email]', e); } }, 30_000).unref();
+  startAutoBackups();
   return app;
 }

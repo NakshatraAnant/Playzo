@@ -45,6 +45,8 @@ export const config = {
   loungeEnabled: bool(env.PLAYZO_LOUNGE_ENABLED),
   /** Internal QA preview: localhost only, never in production, and only for admin/tester accounts. */
   adultDevPreview: !production && bool(env.PLAYZO_ADULT_DEV_PREVIEW),
+  /** Serve the built app (dist/) from the API process outside production (`npm run local`). */
+  serveDist: bool(env.PLAYZO_SERVE_DIST),
   /** Adult age verification must be renewed after this many days. */
   ageVerificationDays: Number(env.PLAYZO_AGE_VERIFICATION_DAYS ?? 365),
   email: {

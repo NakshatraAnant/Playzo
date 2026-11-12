@@ -103,7 +103,16 @@ const router = createBrowserRouter([
   },
 ]);
 
-window.addEventListener('error', (e) => reportError(String(e.message), 'window'));
+window.addEventListener('error', (e) => {
+  // Resource load errors (img/script) and benign browser notices are not app crashes.
+  if (!(e instanceof ErrorEvent)) return;
+  if (/ResizeObserver loop/.test(e.message)) return;
+  const err = e.error as any;
+  const detail = err?.stack ? String(err.stack).split('\n').slice(0, 3).join(' | ') : err !== undefined && err !== null ? String(err) : '';
+  reportError(`${e.message || 'Uncaught error'}${detail ? ` :: ${detail}` : ''}`.slice(0, 480), `${location.pathname} ${e.filename ? `${e.filename.split('/').pop()}:${e.lineno}:${e.colno}` : 'window'}`);
+});
+// Service worker: production builds only (dev uses Vite's live reload).
+if (import.meta.env.PROD && 'serviceWorker' in navigator) addEventListener('load', () => { navigator.serviceWorker.register('/sw.js').catch(() => undefined); });
 window.addEventListener('unhandledrejection', (e) => { const m = String((e.reason as any)?.message ?? e.reason); if (!/abort/i.test(m)) reportError(m, 'promise'); });
 
 createRoot(document.getElementById('root')!).render(

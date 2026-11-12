@@ -6,6 +6,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 5757
+    },
+    {
+      "name": "playzo-local",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "serve:local"],
+      "port": 5757
     }
   ]
 }

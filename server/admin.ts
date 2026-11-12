@@ -10,7 +10,9 @@ import { newId } from './secureRng';
 import { config } from './config';
 import { roomCount, roomList, closeRoom } from './rooms';
 import fs from 'node:fs';
+import path from 'node:path';
 import { emailStatus, requeue } from './email';
+import { backupNow, latestBackup } from './backup';
 import { disabledSet, setEnabled } from './contentFlags';
 import { ACHIEVEMENTS, DAILY_POOL, dailyMissions, weeklyMissions, seasonKey } from './progression';
 import { COSMETICS, COSMETIC_BY_ID } from '../shared/cosmetics';
@@ -260,6 +262,7 @@ export async function adminRoutes(app: FastifyInstance) {
       db: { path: config.dbPath, bytes: dbBytes, migrations: db().all('SELECT name, applied_at FROM schema_migrations'), rows: Object.fromEntries(['users', 'game_sessions', 'ledger', 'matches', 'rooms', 'notifications', 'audit_log'].map((t) => [t, count(t)])) },
       activeSessions: db().get<{ n: number }>('SELECT COUNT(*) AS n FROM auth_sessions WHERE revoked_at IS NULL AND expires_at > ?', nowIso())!.n,
       liveRooms: roomCount(), email: emailStatus(),
+      backup: (() => { const b = latestBackup(); return b ? { file: b.file, at: new Date(b.at).toISOString() } : null; })(),
       // Non-secret configuration only. Secrets (passwords, API keys) are never returned.
       config: {
         production: config.production, devMode: config.devMode, loungeEnabled: config.loungeEnabled, adultDevPreview: config.adultDevPreview,
@@ -268,6 +271,14 @@ export async function adminRoutes(app: FastifyInstance) {
         ageAssurance: Object.entries(AGE_ASSURANCE_PROVIDERS).map(([k, v]) => ({ id: k, production: v.production })),
       },
     };
+  });
+  app.post('/api/admin/backup', async (req) => {
+    const admin = requireRole(req, ['admin']);
+    if (config.dbPath === ':memory:') throw new HttpError(409, 'In-memory database: nothing to back up', 'NOT_AVAILABLE');
+    const file = backupNow();
+    const name = path.basename(file);
+    audit(admin.id, 'admin.backup', name);
+    return { ok: true, file: name };
   });
   app.get('/api/admin/emails', async (req) => {
     requireRole(req, STAFF);

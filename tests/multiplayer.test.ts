@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import WebSocket from 'ws';
 process.env.PLAYZO_DB_PATH = ':memory:';
+process.env.PLAYZO_RATE_LIMIT_MULTIPLIER = '10'; // many sign-ups from one test IP
 const { buildApp } = await import('../server/app');
 const { db } = await import('../server/db');
 const { REPLAY_ENGINES } = await import('../shared/games');
@@ -163,5 +164,43 @@ describe('websocket origin check', () => {
     const hello = await new Promise<any>((res) => ok.on('message', (d) => res(JSON.parse(d.toString()))));
     expect(hello.t).toBe('hello');
     ok.close();
+  });
+});
+
+describe('quick match', () => {
+  it('pairs two eligible players into the same room; guests are refused; adults and teens never meet', async () => {
+    const a = await user('qma'), b = await user('qmb');
+    const A = socket(a.cookie), B = socket(b.cookie);
+    await Promise.all([A.open, B.open]);
+    A.send({ t: 'queue', gameId: 'connect-five' });
+    await A.wait((m) => m.t === 'queued');
+    B.send({ t: 'queue', gameId: 'connect-five' });
+    const ma = await A.wait((m) => m.t === 'matched'), mb = await B.wait((m) => m.t === 'matched');
+    expect(ma.code).toBe(mb.code);
+    // Both can join the matched room.
+    A.send({ t: 'join', code: ma.code }); B.send({ t: 'join', code: mb.code });
+    const r = await A.wait((m) => m.t === 'room' && m.room.members.length === 2);
+    expect(r.room.members.map((x: any) => x.userId).sort()).toEqual([a.id, b.id].sort());
+    A.ws.close(); B.ws.close();
+
+    // Guests cannot use public matchmaking.
+    const g = await fetch(`http://${base}/api/auth/guest`, { method: 'POST', headers: { 'x-playzo': '1', 'content-type': 'application/json' }, body: '{}' });
+    const G = socket(g.headers.get('set-cookie')!.split(';')[0]); await G.open;
+    G.send({ t: 'queue', gameId: 'connect-five' });
+    expect((await G.wait((m) => m.t === 'error')).code).toBe('FORBIDDEN');
+    G.ws.close();
+
+    // An adult and a teen queue for the same game but are kept in separate queues.
+    const teenDob = new Date(Date.now() - 15 * 365.25 * 86400_000).toISOString().slice(0, 10);
+    const tr = await fetch(`http://${base}/api/auth/register`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-playzo': '1' }, body: JSON.stringify({ email: 'qmteen@mp.local', username: 'qmteen', password: 'password123', dob: teenDob, acceptTerms: true }) });
+    const teenCookie = tr.headers.get('set-cookie')!.split(';')[0];
+    const c = await user('qmc');
+    const C = socket(c.cookie), T = socket(teenCookie);
+    await Promise.all([C.open, T.open]);
+    C.send({ t: 'queue', gameId: 'hex-conquest' }); await C.wait((m) => m.t === 'queued');
+    T.send({ t: 'queue', gameId: 'hex-conquest' }); await T.wait((m) => m.t === 'queued');
+    await new Promise((res) => setTimeout(res, 300));
+    expect(C.msgs.some((m) => m.t === 'matched') || T.msgs.some((m) => m.t === 'matched')).toBe(false);
+    C.ws.close(); T.ws.close();
   });
 });

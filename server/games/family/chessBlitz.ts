@@ -181,28 +181,49 @@ function evaluate(p: Pos): number {
   }
   return p.turn === 'w' ? s : -s;
 }
-function search(p: Pos, depth: number, alpha: number, beta: number): number {
+const OUT_OF_TIME = Symbol('out-of-time');
+/** The API is single-threaded: the AI may think for at most this long per move. */
+export const AI_BUDGET_MS = 220;
+function search(p: Pos, depth: number, alpha: number, beta: number, deadline: number): number {
+  if (deadline && performance.now() > deadline) throw OUT_OF_TIME;
   const moves = legalMoves(p);
   if (!moves.length) return inCheck(p) ? -100000 - depth : 0;
   if (depth === 0) return evaluate(p);
   moves.sort((a, b) => (b.capture ? VAL[p.board[b.to]?.toLowerCase() || 'p'] : 0) - (a.capture ? VAL[p.board[a.to]?.toLowerCase() || 'p'] : 0));
   for (const m of moves) {
-    const v = -search(makeMove(p, m), depth - 1, -beta, -alpha);
+    const v = -search(makeMove(p, m), depth - 1, -beta, -alpha, deadline);
     if (v >= beta) return beta;
     if (v > alpha) alpha = v;
   }
   return alpha;
 }
+/**
+ * Iterative deepening with root alpha-beta and a hard time budget. Depth 1 always completes;
+ * deeper iterations are used only if they finish inside the budget, so a move is always legal and
+ * the server's event loop is never blocked for long. Easy adds noise for a gentler opponent.
+ */
 export function bestMove(p: Pos, level: string, rng: Rng): Move {
-  const moves = legalMoves(p);
-  const depth = level === 'easy' ? 1 : level === 'normal' ? 2 : 3;
-  let best: Move[] = [], bestV = -Infinity;
-  for (const m of rng.shuffle(moves.slice())) {
-    let v = -search(makeMove(p, m), depth - 1, -Infinity, Infinity);
-    if (level === 'easy') v += rng.next() * 120;
-    if (v > bestV) { bestV = v; best = [m]; } else if (v === bestV) best.push(m);
+  const moves = rng.shuffle(legalMoves(p).slice());
+  const maxDepth = level === 'easy' ? 1 : level === 'normal' ? 2 : 4;
+  const deadline = performance.now() + AI_BUDGET_MS;
+  let chosen = moves[0];
+  for (let d = 1; d <= maxDepth; d++) {
+    try {
+      let bestV = -Infinity, best = chosen;
+      for (const m of [chosen, ...moves.filter((x) => x !== chosen)]) {
+        let v = level === 'easy'
+          ? -search(makeMove(p, m), d - 1, -Infinity, Infinity, 0) + rng.next() * 120
+          : -search(makeMove(p, m), d - 1, -Infinity, -bestV, d > 1 ? deadline : 0);
+        if (v > bestV) { bestV = v; best = m; }
+      }
+      chosen = best;
+      if (bestV >= 90000) break; // forced mate found
+    } catch (e) {
+      if (e === OUT_OF_TIME) break; // keep the best move of the last completed depth
+      throw e;
+    }
   }
-  return best[0];
+  return chosen;
 }
 
 function finishCheck(s: ChessState) {

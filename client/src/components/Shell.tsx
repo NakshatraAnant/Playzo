@@ -1,5 +1,5 @@
 import { NavLink, Link, Outlet, useLocation } from 'react-router-dom';
-import { Suspense, useEffect } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { Icon } from './Icon';
 import { Logo, Avatar, Coins, Toasts } from './ui';
 import { useStore } from '../lib/store';
@@ -13,6 +13,12 @@ export function Shell() {
   const { me, muted, setMuted } = useStore();
   const loc = useLocation();
   const inGame = /^\/(play|lounge\/play|room)\//.test(loc.pathname);
+  const [online, setOnline] = useState(typeof navigator === 'undefined' ? true : navigator.onLine);
+  useEffect(() => {
+    const on = () => setOnline(true), off = () => setOnline(false);
+    addEventListener('online', on); addEventListener('offline', off);
+    return () => { removeEventListener('online', on); removeEventListener('offline', off); };
+  }, []);
   useEffect(() => { window.scrollTo(0, 0); trackEvent('page_view', { path: loc.pathname.replace(/\/[A-Za-z0-9_-]{12,}$/, '/:id'), source: new URLSearchParams(loc.search).get('utm_source') ?? undefined }); }, [loc.pathname, loc.search]);
   // Optional hub theme between games (off by default; Settings → Sound).
   useEffect(() => {
@@ -80,6 +86,7 @@ export function Shell() {
           ))}
         </nav>
       )}
+      {!online && <div className="offline-banner" role="status">You're offline. Games, scores and rewards need a connection; PLAYZO reconnects automatically.</div>}
       <Toasts />
       <BreakReminder />
     </div>

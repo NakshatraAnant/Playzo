@@ -29,7 +29,7 @@ export default defineConfig({
     { name: 'mobile', use: { ...devices['Pixel 7'], channel, viewport: { width: 390, height: 844 } }, testMatch: /(smoke|family|auth)\.spec\.ts/ },
   ],
   webServer: {
-    command: 'npx concurrently -k -n api,web "npx tsx server/index.ts" "npx vite"',
+    command: 'npx concurrently -k -n api,web "npx tsx server/index.ts" "node scripts/wait-api.mjs && npx vite"',
     url: `http://localhost:${WEB}/api/health`,
     reuseExistingServer: false,
     timeout: 120_000,

@@ -117,7 +117,9 @@ export function Emails() {
 }
 
 export function System() {
+  const { toast, me } = useStore();
   const { data, reload } = useAsync(() => api.get('/api/admin/system'), []);
+  const backup = async () => { try { const r = await api.post('/api/admin/backup'); toast(`Backup written: ${r.file}`, 'ok'); reload(); } catch (e: any) { toast(e.message, 'bad'); } };
   if (!data) return <div className="spinner" />;
   const kb = (n: number) => `${(n / 1024).toFixed(0)} KB`;
   const stats: [string, string | number][] = [['Uptime', `${Math.floor(data.uptimeSec / 60)} min`], ['Memory (RSS)', `${data.memoryMb.rss} MB`], ['Heap', `${data.memoryMb.heap} MB`], ['Database', kb(data.db.bytes)], ['Signed-in sessions', data.activeSessions], ['Live rooms', data.liveRooms], ['Node', data.node]];
@@ -134,6 +136,8 @@ export function System() {
         </tbody></table></div></div>
       <div className="panel"><div className="panel-title"><h3>Database</h3></div>
         <p className="muted" style={{ fontSize: 13 }}>{data.db.path} · migrations: {data.db.migrations.map((m: any) => m.name).join(', ')}</p>
+        <p className="muted" style={{ fontSize: 13 }}>Last backup: {data.backup ? `${data.backup.file} (${new Date(data.backup.at).toLocaleString()})` : 'none yet'} · automatic daily backups, newest 14 kept in data/backups</p>
+        {me?.role === 'admin' && <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={backup}>Back up now</button>}
         <p className="muted" style={{ fontSize: 13 }}>{Object.entries(data.db.rows).map(([k, v]) => `${k} ${v}`).join(' · ')}</p>
       </div>
     </div>

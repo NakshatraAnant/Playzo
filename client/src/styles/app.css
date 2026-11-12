@@ -299,3 +299,7 @@ table.data tr:hover td { background: rgba(255, 255, 255, 0.02); }
 .board .rank { width: 28px; text-align: center; font-weight: 900; font-family: var(--font-display); }
 .board li:nth-child(1) .rank { color: #ffcf4a; } .board li:nth-child(2) .rank { color: #d9e2ff; } .board li:nth-child(3) .rank { color: #e8a25e; }
 @media (max-width: 420px) { .reward-days { display: none; } }
+
+/* Offline notice */
+.offline-banner { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--tabbar-h, 64px) + 12px + env(safe-area-inset-bottom)); z-index: 70; max-width: calc(100% - 32px); padding: 10px 16px; border-radius: 14px; background: #2a1840; border: 1px solid rgba(255, 176, 32, .5); color: #ffe7b0; font-size: 13px; font-weight: 700; text-align: center; box-shadow: 0 10px 30px rgba(0,0,0,.4); }
+@media (min-width: 1024px) { .offline-banner { bottom: 20px; } }
