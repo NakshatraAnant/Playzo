@@ -271,7 +271,7 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
         <div style={{ minWidth: 0 }}>
           <h3 style={{ fontSize: 17, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{meta.title}</h3>
           <div className="row" style={{ gap: 6 }}>
-            <span className="dim" style={{ fontSize: 12, textTransform: 'capitalize' }}>{context === 'solo' ? session?.difficulty ?? difficulty : context}</span>
+            {meta.env === 'family' && <span className="dim" style={{ fontSize: 12, textTransform: 'capitalize' }}>{context === 'solo' ? session?.difficulty ?? difficulty : context}</span>}
             {context === 'daily' && <Chip tone="on" icon="calendar">Daily</Chip>}
             {context === 'challenge' && <Chip tone="on" icon="flag">Challenge</Chip>}
             {context === 'race' && <Chip tone="on" icon="users">Race</Chip>}

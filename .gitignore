@@ -7,3 +7,4 @@ data/backups/
 .env.local
 *.log
 .DS_Store
+data/*.local.json

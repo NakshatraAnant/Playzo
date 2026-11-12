@@ -1,0 +1,27 @@
+eu-roulette red                      n=60000 observed=96.69% ± 0.80% theoretical=97.30% z=-1.50
+eu-roulette straight                 n=60000 observed=97.98% ± 4.69% theoretical=97.30% z=0.29
+us-roulette red                      n=60000 observed=94.39% ± 0.80% theoretical=94.74% z=-0.86
+us-roulette straight                 n=60000 observed=94.68% ± 4.61% theoretical=94.74% z=-0.02
+fr-roulette red                      n=60000 observed=98.47% ± 0.79% theoretical=98.65% z=-0.45
+fr-roulette straight                 n=60000 observed=96.84% ± 4.66% theoretical=97.30% z=-0.19
+sic-bo small                         n=60000 observed=97.03% ± 0.80% theoretical=97.22% z=-0.46
+sic-bo total                         n=60000 observed=79.58% ± 1.78% theoretical=81.02% z=-1.59
+dice-arena over                      n=60000 observed=98.07% ± 0.93% theoretical=97.92% z=0.32
+dice-arena seven                     n=60000 observed=95.90% ± 1.72% theoretical=96.67% z=-0.87
+baccarat banker                      n=80000 observed=98.88% ± 0.64% theoretical=98.94% z=-0.18
+baccarat player                      n=80000 observed=99.15% ± 0.66% theoretical=98.76% z=1.16
+baccarat tie                         n=80000 observed=85.69% ± 1.83% theoretical=85.64% z=0.05
+dragon-tiger dragon                  n=80000 observed=96.08% ± 0.67% theoretical=96.27% z=-0.54
+andar-bahar andar                    n=60000 observed=98.10% ± 0.76%
+andar-bahar bahar                    n=60000 observed=97.28% ± 0.80%
+three-card-poker pooled 0.9786220206119931
+blackjack pooled 0.996046350079073
+classic-slots                        n=120000 observed=97.60% ± 7.61% theoretical=94.52% z=0.79
+adventure-slots                      n=120000 observed=95.82% ± 1.51% theoretical=95.40% z=0.54
+vault-slots                          n=120000 observed=96.12% ± 1.30% theoretical=95.84% z=0.43
+cosmic-reels                         n=120000 observed=96.07% ± 0.93% theoretical=96.42% z=-0.73
+neon-fruit                           n=120000 observed=96.64% ± 1.51% theoretical=96.49% z=0.19
+mystery-jackpot                      n=120000 observed=94.92% ± 7.12% theoretical=95.59% z=-0.18
+plinko 12/medium                     n=80000 observed=98.17% ± 0.56% theoretical=97.76% z=1.43
+hi-lo single call                    n=60000 observed=97.73% ± 0.54% theoretical=98.00% z=-0.98
+mines 3 mines / 2 tiles              n=60000 observed=98.19% ± 0.43% theoretical=97.79% z=1.84

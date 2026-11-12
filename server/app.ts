@@ -70,14 +70,16 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(contentRoutes);
   await app.register(shopRoutes);
   await app.register(adminRoutes);
-  await app.register(seoRoutes);
 
   app.all('/api/*', async (_req, reply) => reply.code(404).send({ error: 'Not found', code: 'NOT_FOUND' }));
 
   // Production: serve the built SPA + prerendered SEO pages.
   const dist = path.resolve('dist');
-  if (config.production && fs.existsSync(dist)) {
-    await app.register(fastifyStatic, { root: dist, wildcard: false, maxAge: '1h' });
+  const serveDist = config.production && fs.existsSync(dist);
+  // Built sites ship static sitemap.xml/robots.txt (scripts/prerender-seo.ts); otherwise serve them dynamically.
+  if (!serveDist) await app.register(seoRoutes);
+  if (serveDist) {
+    await app.register(fastifyStatic, { root: dist, wildcard: false, maxAge: '1h', preCompressed: true });
     app.setNotFoundHandler((req, reply) => {
       const p = path.join(dist, req.url.split('?')[0], 'index.html');
       if (p.startsWith(dist) && fs.existsSync(p)) return reply.type('text/html').send(fs.readFileSync(p));
