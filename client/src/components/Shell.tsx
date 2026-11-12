@@ -5,6 +5,7 @@ import { Logo, Avatar, Coins, Toasts } from './ui';
 import { useStore } from '../lib/store';
 import { setMuted as setAudioMuted, sfx } from '../lib/sound';
 import { trackEvent } from '../lib/api';
+import { NotificationBell, BreakReminder } from '../pages/Engage';
 
 export function Shell() {
   const { me, muted, setMuted } = useStore();
@@ -26,6 +27,7 @@ export function Shell() {
         <Link to="/" aria-label="PLAYZO home"><Logo size={21} /></Link>
         <span className="spacer" />
         {me && <Coins n={me.balances.ZO} />}
+        <NotificationBell />
         <button className="btn btn-ghost icon-btn" onClick={toggleSound} aria-label={muted ? 'Unmute sound' : 'Mute sound'}><Icon name={muted ? 'mute' : 'sound'} /></button>
         {me ? (
           <Link to="/me" aria-label="Your profile" className="row" style={{ gap: 8 }}>
@@ -66,6 +68,7 @@ export function Shell() {
         </nav>
       )}
       <Toasts />
+      <BreakReminder />
     </div>
   );
 }

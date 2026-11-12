@@ -54,6 +54,28 @@ const DOCS: Record<string, { title: string; body: JSX.Element }> = {
       </>
     ),
   },
+  support: {
+    title: 'Help & contact (placeholder)',
+    body: (
+      <>
+        <p><b>Status:</b> placeholder. The operating company, registered address, grievance officer and support email have not been provided yet and are intentionally left blank rather than invented. They must be filled in, and reviewed by counsel, before any public launch (see LEGAL_AND_COMPLIANCE_GATES.md).</p>
+        <h3>Getting help today</h3>
+        <ul>
+          <li><b>Report a player:</b> open their profile and choose Report. Reports go to the moderation queue.</li>
+          <li><b>Block someone:</b> from their profile. Blocked players cannot friend you, challenge you or share a room with you.</li>
+          <li><b>Forgot your password:</b> use <Link to="/forgot">Reset password</Link>.</li>
+          <li><b>Delete your account and data:</b> Settings, then Delete account. This is immediate and permanent.</li>
+          <li><b>Parents and guardians:</b> under-13 accounts cannot use friends or rooms until a parent approves them through the link sent to the parent's email address.</li>
+        </ul>
+        <h3>Contact details</h3>
+        <ul>
+          <li>Support email: <i>to be provided by the operator</i></li>
+          <li>Grievance officer (IT Rules, 2021): <i>to be appointed by the operator</i></li>
+          <li>Registered entity and address: <i>to be provided by the operator</i></li>
+        </ul>
+      </>
+    ),
+  },
 };
 
 export default function Legal() {

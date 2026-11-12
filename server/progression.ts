@@ -3,6 +3,7 @@
  * Lounge simulations never award XP, achievements or ZO (no reward loop around chance play).
  */
 import { db, dayKey, weekKey, nowIso } from './db';
+import { disabledSet, isEnabled } from './contentFlags';
 import { post, zoEarnedToday, ZO_DAILY_GAME_CAP } from './economy';
 import { BY_ID, FAMILY } from '../shared/catalogue';
 import { track } from './analytics';
@@ -52,7 +53,7 @@ export function unlock(userId: string, id: string): boolean {
 /* ---------------- missions ---------------- */
 export interface MissionDef { id: string; period: 'daily' | 'weekly'; title: string; target: number; zo: number; match: (e: MissionEvent) => number }
 export interface MissionEvent { gameId: string; score: number; won: boolean; vsAi: boolean; multiplayer: boolean; daily: boolean; newGame: boolean; challenge: boolean; category: string }
-const DAILY_POOL: MissionDef[] = [
+export const DAILY_POOL: MissionDef[] = [
   { id: 'd_play3', period: 'daily', title: 'Play 3 games', target: 3, zo: 30, match: () => 1 },
   { id: 'd_brain', period: 'daily', title: 'Play a Brain & Logic game', target: 1, zo: 20, match: (e) => +(e.category === 'Brain & Logic') },
   { id: 'd_word', period: 'daily', title: 'Play a Word & Knowledge game', target: 1, zo: 20, match: (e) => +(e.category === 'Word & Knowledge') },
@@ -79,19 +80,22 @@ export const weeklyMissions = () => WEEKLY;
 
 export function missionsFor(userId: string) {
   const d = dayKey(), w = weekKey();
+  const off = disabledSet('mission');
   const rows = db().all<{ mission_id: string; period: string; progress: number; claimed_at: string | null }>('SELECT mission_id, period, progress, claimed_at FROM mission_progress WHERE user_id = ? AND period IN (?, ?)', userId, d, w);
   const get = (id: string, p: string) => rows.find((r) => r.mission_id === id && r.period === p);
   const shape = (m: MissionDef, p: string) => {
     const r = get(m.id, p);
     return { id: m.id, period: m.period, title: m.title, target: m.target, zo: m.zo, progress: Math.min(m.target, r?.progress ?? 0), claimed: !!r?.claimed_at };
   };
-  return { daily: dailyMissions().map((m) => shape(m, d)), weekly: weeklyMissions().map((m) => shape(m, w)), resetsDaily: d, week: w };
+  return { daily: dailyMissions().filter((m) => !off.has(m.id)).map((m) => shape(m, d)), weekly: weeklyMissions().filter((m) => !off.has(m.id)).map((m) => shape(m, w)), resetsDaily: d, week: w };
 }
 
 function bumpMissions(userId: string, e: MissionEvent) {
   const d = dayKey(), w = weekKey();
+  const off = disabledSet('mission');
   for (const [defs, p] of [[dailyMissions(), d], [weeklyMissions(), w]] as const) {
     for (const m of defs) {
+      if (off.has(m.id)) continue;
       const inc = m.match(e);
       if (!inc) continue;
       db().run(
@@ -106,6 +110,7 @@ function bumpMissions(userId: string, e: MissionEvent) {
 export function claimMission(userId: string, missionId: string) {
   const def = [...dailyMissions(), ...weeklyMissions()].find((m) => m.id === missionId);
   if (!def) throw new Error('Unknown mission');
+  if (!isEnabled('mission', missionId)) return { ok: false, reason: 'This mission is not available right now' };
   const period = def.period === 'daily' ? dayKey() : weekKey();
   return db().tx(() => {
     const row = db().get<{ progress: number; claimed_at: string | null }>('SELECT progress, claimed_at FROM mission_progress WHERE user_id = ? AND mission_id = ? AND period = ?', userId, missionId, period);

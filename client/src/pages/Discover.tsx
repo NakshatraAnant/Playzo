@@ -9,6 +9,7 @@ import { GameCover } from '../art/covers';
 import { BY_ID, FAMILY } from '@shared/catalogue';
 import { sfx } from '../lib/sound';
 import { Tutorial } from '../games/runtime';
+import { SeasonBoard } from './Engage';
 
 const CATS = ['All', 'Brain & Logic', 'Word & Knowledge', 'Strategy', 'Reaction & Party'];
 const FORMAT_LABEL: Record<string, string> = { solo: 'Solo', ai: 'vs Computer', versus: 'Live 1v1', teams: '2v2 Teams', group: 'Group room', race: 'Live race', async: 'Friend challenge', daily: 'Daily puzzle' };
@@ -143,10 +144,17 @@ export function Leaderboards() {
   const [game, setGame] = useState(params.get('game') ?? FAMILY[0].id);
   const [scope, setScope] = useState<'week' | 'all'>('week');
   const [friends, setFriends] = useState(false);
-  const { data, loading } = useAsync(() => api.get(`/api/leaderboard/${game}?scope=${scope}${friends ? '&friends=1' : ''}`), [game, scope, friends]);
+  const [view, setView] = useState<'games' | 'season'>(params.get('view') === 'season' ? 'season' : 'games');
+  const { data, loading } = useAsync(() => (view === 'games' ? api.get(`/api/leaderboard/${game}?scope=${scope}${friends ? '&friends=1' : ''}`) : Promise.resolve(null)), [game, scope, friends, view]);
+  if (view === 'season') return (
+    <div className="stack">
+      <div className="row wrap"><h1 style={{ fontSize: 'var(--fs-2xl)', flex: 1 }}>Leaderboards</h1><div className="seg"><button onClick={() => setView('games')}>By game</button><button className="on">Season</button></div></div>
+      <div className="panel"><SeasonBoard /></div>
+    </div>
+  );
   return (
     <div className="stack">
-      <h1 style={{ fontSize: 'var(--fs-2xl)' }}>Leaderboards</h1>
+      <div className="row wrap"><h1 style={{ fontSize: 'var(--fs-2xl)', flex: 1 }}>Leaderboards</h1><div className="seg"><button className="on">By game</button><button onClick={() => setView('season')}>Season</button></div></div>
       <div className="row wrap">
         <select className="input" style={{ maxWidth: 280 }} value={game} onChange={(e) => setGame(e.target.value)} aria-label="Game">{FAMILY.map((g) => <option key={g.id} value={g.id}>{g.title}</option>)}</select>
         <div className="seg"><button className={scope === 'week' ? 'on' : ''} onClick={() => setScope('week')}>This week</button><button className={scope === 'all' ? 'on' : ''} onClick={() => setScope('all')}>All time</button></div>

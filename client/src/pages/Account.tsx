@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
+import { SecuritySettings } from './Engage';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, trackEvent } from '../lib/api';
 import { useAsync, useStore } from '../lib/store';
@@ -74,7 +75,8 @@ export function Register() {
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setErr(null); setBusy(true);
     try {
-      const r = await api.post('/api/auth/register', { ...f, parentEmail: child ? f.parentEmail : undefined });
+      const ref = new URLSearchParams(location.search).get('ref') ?? undefined;
+      const r = await api.post('/api/auth/register', { ...f, parentEmail: child ? f.parentEmail : undefined, ref });
       setMe(r.user); trackEvent('onboarding_complete', { band: r.user.ageBand });
       nav('/welcome');
     } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
@@ -102,15 +104,15 @@ export function Register() {
 
 export function Welcome() {
   useTitle('Welcome');
-  const { me } = useStore();
+  const { me, providers } = useStore();
   if (!me) return null;
   return (
     <AuthCard title={`Welcome, ${me.displayName}!`} sub="Aaja PLAYZO pe khelte hain! Here's how to get going:">
       <ol className="col" style={{ paddingLeft: 18, margin: 0 }}>
         <li>Try the <b>Daily Puzzle</b>: everyone gets the same one.</li>
         <li>Finish games to earn <b>XP</b> and <b>ZO coins</b> for cosmetic avatars, frames and themes.</li>
-        <li>{me.ageBand === 'child' && !me.parentalConsent ? 'Ask a parent to approve friends & multiplayer using the email we sent them.' : 'Add friends and challenge them on the exact same puzzle.'}</li>
-        {!me.emailVerified && <li>Verify your email (check your inbox{me.email ? ` at ${me.email}` : ''}).</li>}
+        <li>{me.ageBand === 'child' && !me.parentalConsent ? (providers.email ? 'Ask a parent to approve friends & multiplayer using the email we sent them.' : 'A parent approval link was created. Email delivery is not configured on this server yet, so it is in the local outbox.') : 'Add friends and challenge them on the exact same puzzle.'}</li>
+        {!me.emailVerified && <li>{providers.email ? <>Verify your email (check your inbox{me.email ? ` at ${me.email}` : ''}).</> : <>Verify your email: this server has no email provider yet, so the link is in the <Link to="/dev/outbox" style={{ color: 'var(--zo-cyan)' }}>local outbox</Link>.</>}</li>}
       </ol>
       <div className="row" style={{ marginTop: 18 }}><Link className="btn btn-primary btn-lg" to="/">Start playing</Link><Link className="btn" to="/settings">Settings</Link></div>
     </AuthCard>
@@ -119,11 +121,12 @@ export function Welcome() {
 
 export function Forgot() {
   useTitle('Reset password');
+  const { providers } = useStore();
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   return (
     <AuthCard title="Reset your password" sub="We'll email you a link that's valid for one hour.">
-      {sent ? <p className="muted">If an account exists for that email, a reset link is on its way.</p> : (
+      {sent ? <p className="muted">{providers.email ? 'If an account exists for that email, a reset link is on its way.' : 'If an account exists for that email, a reset link was created. Email delivery is not configured on this server yet, so nothing was emailed: in development the link is in the local outbox.'}</p> : (
         <form className="col" onSubmit={async (e) => { e.preventDefault(); await api.post('/api/auth/forgot', { email }).catch(() => undefined); setSent(true); }}>
           <div className="field"><label htmlFor="em">Email</label><input id="em" type="email" className="input" value={email} onChange={(e) => setEmail(e.target.value)} required /></div>
           <button className="btn btn-primary btn-block">Send link</button>
@@ -176,14 +179,14 @@ export function DevOutbox() {
   return (
     <div className="stack">
       <h1 style={{ fontSize: 'var(--fs-2xl)' }}>Dev email outbox</h1>
-      <p className="muted">Local development only. No email provider is configured, so verification, reset and parental-consent messages are stored here instead of being sent.</p>
+      <p className="muted">Local development only. {data?.delivery?.note ?? "No email provider is configured"}. Verification, reset and parental-consent messages are stored here instead of being sent.</p>
       {error && <div className="form-error">{error}</div>}
       {data?.messages?.map((m: any) => {
         const link = m.body.match(/https?:\/\/\S+/)?.[0];
         const path = link ? link.replace(/^https?:\/\/[^/]+/, '') : null;
         return (
           <div key={m.id} className="panel panel-tight">
-            <div className="row"><b style={{ flex: 1 }}>{m.subject}</b><span className="dim" style={{ fontSize: 12 }}>{new Date(m.created_at).toLocaleString()}</span></div>
+            <div className="row"><b style={{ flex: 1 }}>{m.subject}</b><Chip tone={m.status === "sent" ? "ok" : "warn"}>{m.status === "outbox_only" ? "Not delivered (local outbox)" : m.status}</Chip><span className="dim" style={{ fontSize: 12 }}>{new Date(m.created_at).toLocaleString()}</span></div>
             <div className="dim" style={{ fontSize: 13 }}>To: {m.to_email}</div>
             <p style={{ fontSize: 14, marginTop: 6, wordBreak: 'break-word' }}>{m.body}</p>
             {path && <Link className="btn btn-sm" to={path} style={{ marginTop: 8 }}>Open link</Link>}
@@ -216,6 +219,7 @@ export function Settings() {
           <button className="btn" onClick={async () => { await api.post('/api/auth/logout'); setMe(null); nav('/'); refresh(); }}><Icon name="logout" />Sign out</button>
         </div>
       </div>
+      <SecuritySettings />
       <div className="panel">
         <div className="panel-title"><Icon name="shield" /><h3>Privacy</h3></div>
         <div className="field"><label htmlFor="pv">Who can see my profile and stats</label>

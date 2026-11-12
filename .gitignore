@@ -8,3 +8,5 @@ data/backups/
 *.log
 .DS_Store
 data/*.local.json
+test-results/
+playwright-report/

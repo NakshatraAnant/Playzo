@@ -40,6 +40,7 @@ const Lounge = lazy(() => L().then((m) => ({ default: m.Lounge })));
 const LoungeGame = lazy(() => L().then((m) => ({ default: m.LoungeGame })));
 const LoungePlay = lazy(() => L().then((m) => ({ default: m.LoungePlay })));
 const Admin = lazy(() => import('./pages/Admin'));
+const Notifications = lazy(() => import('./pages/Engage').then((m) => ({ default: m.Notifications })));
 const Legal = lazy(() => import('./pages/Legal'));
 
 class Boundary extends Component<{ children: ReactNode }, { err: Error | null }> {
@@ -83,6 +84,7 @@ const router = createBrowserRouter([
       { path: '/friends', element: <Friends /> },
       { path: '/shop', element: <Shop /> },
       { path: '/settings', element: <Settings /> },
+      { path: '/notifications', element: <Notifications /> },
       { path: '/login', element: <Login /> },
       { path: '/register', element: <Register /> },
       { path: '/welcome', element: <Welcome /> },

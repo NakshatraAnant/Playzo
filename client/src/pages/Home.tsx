@@ -8,6 +8,7 @@ import { Icon } from '../components/Icon';
 import { GameCover } from '../art/covers';
 import { BY_ID } from '@shared/catalogue';
 import { sfx } from '../lib/sound';
+import { DailyRewardCard } from './Engage';
 const Hero3D = lazy(() => import('../three/Hero3D'));
 
 export default function Home() {
@@ -35,6 +36,7 @@ export default function Home() {
         </div>
       </section>
 
+      <DailyRewardCard />
       {error && <ErrorBox message={error} retry={reload} />}
       {loading && !data && <div className="grid-games">{Array.from({ length: 5 }, (_, i) => <Skeleton key={i} h={220} />)}</div>}
       {data && (

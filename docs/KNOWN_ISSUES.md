@@ -1,28 +1,31 @@
-# Known Issues and Limitations
+# Known Issues and Limitations (2026-11-12)
 
-| ID | Severity | Issue | Impact / workaround |
-|---|---|---|---|
-| KI-1 | Blocking (Lounge launch) | All 25 Lounge simulations are disabled pending legal review (gates G1-G8) | By design. Internal QA only via `PLAYZO_ADULT_DEV_PREVIEW=true` on localhost |
-| KI-2 | High (production) | No email provider: verification, reset and parental-consent emails go to the dev outbox | Integrate an email provider; the outbox is refused in production |
-| KI-3 | Medium | Google/Apple sign-in not configured (no credentials) | Buttons are disabled and say "not configured"; the endpoint returns 501 |
-| KI-4 | Medium | Payments are a dev-mock test checkout only | Real payments need legal and commercial approval |
-| KI-5 | Medium | Rooms, the quick-match queue and rate limits live in memory in one process; a restart drops live rooms | Use Redis/pub-sub for multi-instance deployments |
-| KI-6 | Medium | Replay verification proves a run is *possible* and humanly timed, but cannot fully stop scripted bots in real-time games | Add behavioural anomaly scoring and review of rejected runs (admin view exists) |
-| KI-7 | Low | Not every one of the 50 game UIs was played to completion in a browser (engines are fully tested) | Add a Playwright suite |
-| KI-8 | Low | SQLite instead of PostgreSQL (no Postgres or Docker daemon available locally) | Portable schema; PostgreSQL mapping documented |
-| KI-9 | Low | Chess AI on Hard (depth 3) can block the API event loop for up to ~1s | Move AI to a worker thread before scaling |
-| KI-10 | Low | No ad network: house placements only; rewarded ads not implemented | Architecture and frequency caps ready |
-| KI-11 | Low | Backups are manual (`npm run backup:db`) | Schedule with Task Scheduler / cron |
-| KI-12 | Low | PWA has a manifest but no service worker (no offline mode) | Add Workbox for static/offline play |
-| KI-13 | Info | No AI image or video generation tools were available: all art is original procedural vector/WebGL; **no video trailers or intros exist** | An AI asset pass can replace covers later; ASSET_REGISTER.md tracks provenance |
-| KI-14 | Info | Emoji-based content (Emoji Decode, critters, flags) renders with the OS emoji font | Acceptable; bespoke art could replace it |
-| KI-15 | Low | Main bundle 545 KB raw (152 KB Brotli) includes framer-motion and the 50 cover-art motifs | Split covers per route if FCP on slow networks needs improving |
-| KI-16 | Info | Legal pages are engineering drafts, not reviewed by counsel | Gate G5 |
+| ID | Severity | Issue | Impact / workaround | Status |
+|---|---|---|---|---|
+| KI-1 | Blocking (Lounge launch) | No Lounge game has legal clearance (gates G1-G8 open) | Public Lounge is OFF by default; internal QA preview only for admin/tester accounts on localhost | BLOCKED (legal) |
+| KI-2 | High (production) | No email provider credentials: verification, reset, parental-consent and security emails stay in the local outbox | The Resend adapter is implemented; set `PLAYZO_EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `PLAYZO_EMAIL_FROM`. The UI says honestly that nothing was emailed | BLOCKED (credentials) |
+| KI-3 | Medium | Google/Apple sign-in not configured | Buttons disabled and labelled; endpoint returns 501 | BLOCKED (credentials) |
+| KI-4 | Medium | Payments are a TEST MODE checkout only | No real money; real payments need legal and commercial approval (G7) | BLOCKED (legal/commercial) |
+| KI-5 | Medium | Single-process server: rate-limit buckets and the quick-match queue are in memory | Rooms now persist in SQLite and survive restarts; multi-instance scaling needs Redis/pub-sub | PARTIAL |
+| KI-6 | Medium | Replay verification proves a run is possible and humanly timed but cannot fully stop scripted bots | Admin sees rejected runs; behavioural scoring not built | PARTIAL |
+| KI-7 | Low | Five server-timed family games (Trivia Clash, Party Chaos, Geography Sprint, Word Duel, Emoji Decode) are not played to their natural end in the browser tests (rounds last minutes) | Their full play-to-end path is covered by `tests/familyComplete.test.ts` with a simulated clock; browser tests cover start, input, pause/resume and restart | PARTIAL |
+| KI-8 | Low | SQLite instead of PostgreSQL (no Postgres or Docker daemon available) | Schema is portable; mapping in DATABASE_SCHEMA.md | NOT STARTED |
+| KI-9 | Low | Chess AI on Hard can block the API event loop for up to ~1s | Move AI to a worker thread before scaling | OPEN |
+| KI-10 | Low | No ad network: house placements only | Architecture and caps ready | NOT STARTED |
+| KI-11 | Low | Backups are manual (`npm run backup:db`) | Schedule with Task Scheduler / cron | OPEN |
+| KI-12 | Low | PWA manifest but no service worker (no offline play) | Add Workbox | NOT STARTED |
+| KI-13 | Info | No AI image/video generation tools were available: all art is original procedural SVG/WebGL; **no video trailers exist** | ASSET_REGISTER.md tracks provenance | BLOCKED (tools) |
+| KI-14 | Info | Emoji content renders with the OS emoji font | Acceptable | OPEN |
+| KI-15 | Low | Main bundle ~550 KB raw (~155 KB Brotli) | Split cover art per route if slow-network FCP matters | OPEN |
+| KI-16 | Info | Terms, Privacy and Help pages are drafts/placeholders; operator, grievance officer and support email intentionally blank | Gate G5 | BLOCKED (legal) |
+| KI-17 | High (production) | No independent penetration test | Internal review in SECURITY_AUDIT.md | NOT STARTED |
+| KI-18 | Low | Quick match has no automated two-client test | Manually exercised; rooms/races are fully tested | PARTIAL |
+| KI-19 | Info | Browser tests run on Microsoft Edge (Chromium) only; Safari/Firefox and real phones not tested | Install other Playwright browsers when network downloads are acceptable | PARTIAL |
+| KI-20 | Low | Certified age verification provider not integrated | Lounge fails closed: no non-QA adult can be verified | BLOCKED (vendor + legal) |
 
 ## Recommended next steps
-1. Legal review of gates G1-G8.
-2. Email and age-assurance vendors.
-3. PostgreSQL + Redis.
-4. Playwright E2E suite.
-5. AI art pass (optional).
-6. Service worker.
+1. Legal review of gates G1-G8 (and record outcomes in Admin → Legal).
+2. Email provider credentials; certified age-assurance vendor.
+3. PostgreSQL + Redis before any multi-instance deployment.
+4. Independent penetration test.
+5. Cross-browser and real-device testing.

@@ -8,6 +8,7 @@ import { config } from './config';
 import { newId } from './secureRng';
 import { track } from './analytics';
 import { publicMe } from './auth';
+import { disabledSet, isEnabled } from './contentFlags';
 
 const isPlus = (u: User) => !!(u.premium_until && (u.premium_until as string) > nowIso());
 
@@ -15,8 +16,9 @@ export async function shopRoutes(app: FastifyInstance) {
   app.get('/api/shop', async (req) => {
     const u = currentUser(req);
     const owned = u ? new Set(db().all<{ item_id: string }>('SELECT item_id FROM inventory WHERE user_id = ?', u.id).map((r) => r.item_id)) : new Set<string>();
+    const off = disabledSet('cosmetic');
     return {
-      items: COSMETICS.map((c) => ({ ...c, owned: c.priceZo === 0 || owned.has(c.id) || (!!c.plusOnly && !!u && isPlus(u)), equipped: !!u && (u.avatar === c.id || u.frame === c.id || u.theme === c.id) })),
+      items: COSMETICS.filter((c) => !off.has(c.id) || owned.has(c.id)).map((c) => ({ ...c, owned: c.priceZo === 0 || owned.has(c.id) || (!!c.plusOnly && !!u && isPlus(u)), equipped: !!u && (u.avatar === c.id || u.frame === c.id || u.theme === c.id) })),
       plans: PLANS, payments: { enabled: false, devMock: config.devMode, note: 'Real payments are disabled until legal and commercial approval. Dev mode uses a clearly labelled test checkout.' },
       zo: u ? balance(u.id, 'ZO') : 0,
     };
@@ -26,6 +28,7 @@ export async function shopRoutes(app: FastifyInstance) {
     const u = requireUser(req);
     const item = COSMETIC_BY_ID[String((req.body as any)?.itemId)];
     if (!item || item.priceZo === null) throw new HttpError(400, 'This item cannot be bought with ZO', 'VALIDATION');
+    if (!isEnabled('cosmetic', item.id)) throw new HttpError(409, 'This item is not available right now', 'UNAVAILABLE');
     if (db().get('SELECT 1 FROM inventory WHERE user_id = ? AND item_id = ?', u.id, item.id) || item.priceZo === 0) return { ok: true, owned: true };
     db().tx(() => {
       post(u.id, 'ZO', -item.priceZo!, 'purchase', `cosmetic:${item.id}`, `buy:${u.id}:${item.id}`);

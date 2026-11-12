@@ -47,3 +47,13 @@ In-memory `Map<code, Room>` in one process; a 500 ms timer ticks timed engines, 
 - Brotli/gzip pre-compressed at build time.
 - Measured (production build, localhost): TTFB 17 ms, FCP 0.56 s, LCP 1.89 s, heap 11 MB.
 - Main bundle: 545 KB raw / 152 KB Brotli.
+
+## Final-build additions (2026-11-12)
+- **Access control (`server/access.ts`)**: `isQaPreview()` (flag + admin/tester role + non-production), `legalGate()` two-key check (`PLAYZO_LOUNGE_ENABLED` + `PLAYZO_LEGAL_APPROVALS` + approved `legal_reviews` record), `loungeAccess()` adds `lounge_disabled`, `age_verification_expired`, `visible`.
+- **Persistent rooms (`server/rooms.ts`)**: every structural change is snapshotted to the `rooms` table (timed ticks at most every 2 s); `restoreRooms()` runs at startup; `onClose` flushes all rooms; deterministic match ids prevent duplicate results; WebSocket Origin allowlist; lobby members get a 60 s reconnect grace period.
+- **Pause/resume (`server/sessions.ts`)**: `/api/sessions/:id/pause|resume` for solo family sessions; timed engines implement `shiftTime(state, dt)`; paused runs are not rankable.
+- **Email (`server/email.ts`)**: provider adapter (`outbox` default, `resend`), HTML+text templates, delivery log with retries (30 s worker).
+- **Notifications (`server/notify.ts`)**, **rewards/seasons/referrals (`server/rewards.ts`)**, **content flags (`server/contentFlags.ts`)**.
+- **Admin**: legal records, live rooms (close), content flags, leaderboard moderation, email log, system health and read-only configuration (`server/admin.ts`, `client/src/pages/AdminExtra.tsx`).
+- **Client**: notification bell and inbox, daily reward card, season board, match history, session management and notification preferences (`client/src/pages/Engage.tsx`); pause overlay, restart and Finish controls in `GameHost`.
+- **Testing**: Vitest (unit, engine, statistics, API, WebSocket) + Playwright (`e2e/`, Edge, isolated in-memory instance on ports 5767/5768).

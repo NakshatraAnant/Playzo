@@ -1,6 +1,7 @@
 import type { FastifyRequest, FastifyReply } from 'fastify';
 import { db, Row } from './db';
 import { sha256 } from './secureRng';
+import { config } from './config';
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public code = 'ERROR', public extra?: Record<string, unknown>) {
@@ -64,6 +65,7 @@ export function oneOf<T extends string>(v: unknown, options: readonly T[], name:
 /* ---------------- in-memory rate limiting (per process) ---------------- */
 const buckets = new Map<string, { tokens: number; at: number }>();
 export function rateLimit(req: FastifyRequest, group: string, perMinute: number) {
+  perMinute *= config.rateLimitMultiplier;
   const key = `${group}:${currentUser(req)?.id ?? req.ip}`;
   const now = Date.now();
   const b = buckets.get(key) ?? { tokens: perMinute, at: now };

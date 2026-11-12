@@ -4,11 +4,16 @@ import { db, nowIso } from './db';
 import { HttpError, requireRole, audit, str, User } from './http';
 import { overview } from './analytics';
 import { CATALOGUE, BY_ID } from '../shared/catalogue';
-import { legalGate, AGE_ASSURANCE_PROVIDERS } from './access';
+import { legalGate, AGE_ASSURANCE_PROVIDERS, latestLegalReview } from './access';
 import { post, balance } from './economy';
 import { newId } from './secureRng';
 import { config } from './config';
-import { roomCount } from './rooms';
+import { roomCount, roomList, closeRoom } from './rooms';
+import fs from 'node:fs';
+import { emailStatus, requeue } from './email';
+import { disabledSet, setEnabled } from './contentFlags';
+import { ACHIEVEMENTS, DAILY_POOL, dailyMissions, weeklyMissions, seasonKey } from './progression';
+import { COSMETICS, COSMETIC_BY_ID } from '../shared/cosmetics';
 
 const STAFF: User['role'][] = ['admin', 'support'];
 
@@ -148,10 +153,143 @@ export async function adminRoutes(app: FastifyInstance) {
     return { entries: db().all('SELECT * FROM audit_log ORDER BY id DESC LIMIT 200') };
   });
 
+  /* ---------------- legal review records (documentation only; never unlocks a game by itself) ---------------- */
+  app.get('/api/admin/legal', async (req) => {
+    requireRole(req, STAFF);
+    return {
+      loungeEnabled: config.loungeEnabled, adultDevPreview: config.adultDevPreview, production: config.production,
+      rule: 'A Lounge game is public only when PLAYZO_LOUNGE_ENABLED=true AND PLAYZO_LEGAL_APPROVALS names it AND the latest india_law record is "approved" with the same reference. This dashboard can record reviews but cannot change server configuration.',
+      games: CATALOGUE.filter((g) => g.env === 'lounge').map((g) => ({
+        id: g.id, title: g.title, gate: legalGate(g.id).status, configRef: config.legalApprovals[g.id] ?? null, latest: latestLegalReview(g.id),
+        platforms: Object.fromEntries(['google_play', 'app_store'].map((sc) => [sc, latestLegalReview(g.id, sc)?.status ?? 'pending'])),
+        history: db().all('SELECT r.id, r.scope, r.status, r.reference, r.reviewer, r.notes, r.created_at, u.username AS recorded_by FROM legal_reviews r LEFT JOIN users u ON u.id = r.recorded_by WHERE r.game_id = ? ORDER BY r.id DESC LIMIT 20', g.id),
+      })),
+    };
+  });
+  app.post('/api/admin/legal/:id', async (req) => {
+    const admin = requireRole(req, ['admin']);
+    const id = (req.params as any).id;
+    if (BY_ID[id]?.env !== 'lounge') throw new HttpError(404, 'Lounge game not found', 'NOT_FOUND');
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const status = String(b.status);
+    const scope = String(b.scope ?? 'india_law');
+    if (!['pending', 'in_review', 'approved', 'rejected', 'blocked'].includes(status)) throw new HttpError(400, 'Bad status', 'VALIDATION');
+    if (!['india_law', 'state_law', 'google_play', 'app_store'].includes(scope)) throw new HttpError(400, 'Bad scope', 'VALIDATION');
+    const reference = b.reference ? str(b.reference, 'Reference', 3, 120) : null;
+    const reviewer = b.reviewer ? str(b.reviewer, 'Reviewer', 2, 120) : null;
+    if (status === 'approved' && (!reference || !reviewer)) throw new HttpError(400, 'An approval needs the written opinion reference and the reviewer', 'VALIDATION');
+    db().run('INSERT INTO legal_reviews (game_id, scope, status, reference, reviewer, notes, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      id, scope, status, reference, reviewer, b.notes ? String(b.notes).slice(0, 1000) : null, admin.id);
+    audit(admin.id, 'admin.legal_review', id, { scope, status, reference });
+    return { ok: true, gate: legalGate(id).status };
+  });
+
+  /* ---------------- live rooms and matches ---------------- */
+  app.get('/api/admin/rooms', async (req) => {
+    requireRole(req, STAFF);
+    return {
+      live: roomList(),
+      persisted: db().get<{ n: number }>("SELECT COUNT(*) AS n FROM rooms WHERE status IN ('lobby','playing')")!.n,
+      matches: db().all('SELECT id, room_code, game_id, format, created_at, (SELECT COUNT(*) FROM match_players mp WHERE mp.match_id = m.id) AS players FROM matches m ORDER BY created_at DESC LIMIT 50'),
+    };
+  });
+  app.post('/api/admin/rooms/:code/close', async (req) => {
+    const admin = requireRole(req, STAFF);
+    const code = String((req.params as any).code).toUpperCase();
+    const reason = str((req.body as any)?.reason, 'Reason', 3, 200);
+    if (!closeRoom(code, reason)) throw new HttpError(404, 'Room not found', 'NOT_FOUND');
+    audit(admin.id, 'admin.room_close', code, { reason });
+    return { ok: true };
+  });
+
+  /* ---------------- sessions, leaderboards, content ---------------- */
+  app.post('/api/admin/users/:id/revoke-sessions', async (req) => {
+    const admin = requireRole(req, STAFF);
+    const id = (req.params as any).id;
+    const n = db().run('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL', nowIso(), id).changes;
+    audit(admin.id, 'admin.revoke_sessions', id, { count: Number(n) });
+    return { ok: true, revoked: Number(n) };
+  });
+  app.post('/api/admin/scores/remove', async (req) => {
+    const admin = requireRole(req, ['admin']);
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const userId = str(b.userId, 'User', 3, 64), gameId = str(b.gameId, 'Game', 2, 40);
+    const reason = str(b.reason, 'Reason', 5, 200);
+    if (!BY_ID[gameId]) throw new HttpError(404, 'Game not found', 'NOT_FOUND');
+    const n = db().tx(() => {
+      const r = db().run('DELETE FROM scores WHERE user_id = ? AND game_id = ?', userId, gameId);
+      db().run('UPDATE game_stats SET best_score = 0 WHERE user_id = ? AND game_id = ?', userId, gameId);
+      return Number(r.changes);
+    });
+    audit(admin.id, 'admin.scores_removed', userId, { gameId, removed: n, reason });
+    return { ok: true, removed: n };
+  });
+  app.get('/api/admin/content', async (req) => {
+    requireRole(req, STAFF);
+    const offM = disabledSet('mission'), offC = disabledSet('cosmetic');
+    const unlocks = db().all<{ achievement_id: string; n: number }>('SELECT achievement_id, COUNT(*) AS n FROM achievements GROUP BY achievement_id');
+    const owned = db().all<{ item_id: string; n: number }>('SELECT item_id, COUNT(*) AS n FROM inventory GROUP BY item_id');
+    return {
+      missions: [...DAILY_POOL, ...weeklyMissions()].map((m) => ({ id: m.id, period: m.period, title: m.title, target: m.target, zo: m.zo, enabled: !offM.has(m.id), activeToday: dailyMissions().some((d) => d.id === m.id) || m.period === 'weekly' })),
+      achievements: ACHIEVEMENTS.map((a) => ({ id: a.id, title: a.title, desc: a.desc, zo: a.zo, unlocked: unlocks.find((u) => u.achievement_id === a.id)?.n ?? 0 })),
+      cosmetics: COSMETICS.map((c) => ({ id: c.id, name: c.name, kind: c.kind, priceZo: c.priceZo, plusOnly: !!c.plusOnly, enabled: !offC.has(c.id), owned: owned.find((o) => o.item_id === c.id)?.n ?? 0 })),
+      season: { key: seasonKey(), players: db().get<{ n: number }>('SELECT COUNT(*) AS n FROM season_points WHERE season = ?', seasonKey())!.n },
+    };
+  });
+  app.post('/api/admin/content/:kind/:id', async (req) => {
+    const admin = requireRole(req, ['admin']);
+    const { kind, id } = req.params as { kind: string; id: string };
+    if (kind !== 'mission' && kind !== 'cosmetic') throw new HttpError(400, 'Bad kind', 'VALIDATION');
+    const known = kind === 'mission' ? [...DAILY_POOL, ...weeklyMissions()].some((m) => m.id === id) : !!COSMETIC_BY_ID[id];
+    if (!known) throw new HttpError(404, 'Not found', 'NOT_FOUND');
+    const enabled = !!(req.body as any)?.enabled;
+    setEnabled(kind, id, enabled, admin.id);
+    audit(admin.id, 'admin.content_flag', `${kind}:${id}`, { enabled });
+    return { ok: true };
+  });
+
+  /* ---------------- system health, configuration (read-only), email delivery ---------------- */
+  app.get('/api/admin/system', async (req) => {
+    requireRole(req, STAFF);
+    const mem = process.memoryUsage();
+    let dbBytes = 0;
+    try { if (config.dbPath !== ':memory:') dbBytes = fs.statSync(config.dbPath).size + (fs.existsSync(config.dbPath + '-wal') ? fs.statSync(config.dbPath + '-wal').size : 0); } catch { /* ignore */ }
+    const count = (t: string) => db().get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${t}`)!.n;
+    return {
+      node: process.version, uptimeSec: Math.round(process.uptime()), memoryMb: { rss: Math.round(mem.rss / 1048576), heap: Math.round(mem.heapUsed / 1048576) },
+      db: { path: config.dbPath, bytes: dbBytes, migrations: db().all('SELECT name, applied_at FROM schema_migrations'), rows: Object.fromEntries(['users', 'game_sessions', 'ledger', 'matches', 'rooms', 'notifications', 'audit_log'].map((t) => [t, count(t)])) },
+      activeSessions: db().get<{ n: number }>('SELECT COUNT(*) AS n FROM auth_sessions WHERE revoked_at IS NULL AND expires_at > ?', nowIso())!.n,
+      liveRooms: roomCount(), email: emailStatus(),
+      // Non-secret configuration only. Secrets (passwords, API keys) are never returned.
+      config: {
+        production: config.production, devMode: config.devMode, loungeEnabled: config.loungeEnabled, adultDevPreview: config.adultDevPreview,
+        legalApprovals: Object.keys(config.legalApprovals).length, ageVerificationDays: config.ageVerificationDays, publicUrl: config.publicUrl,
+        oauth: { google: !!config.googleClientId, apple: !!config.appleClientId }, payments: 'dev-mock (TEST MODE) only',
+        ageAssurance: Object.entries(AGE_ASSURANCE_PROVIDERS).map(([k, v]) => ({ id: k, production: v.production })),
+      },
+    };
+  });
+  app.get('/api/admin/emails', async (req) => {
+    requireRole(req, STAFF);
+    const mask = (e: string) => e.replace(/^(.)(.*)(@.*)$/, (_m, a, b, c) => a + '*'.repeat(Math.min(6, b.length)) + c);
+    return {
+      delivery: emailStatus(),
+      messages: db().all<any>('SELECT id, to_email, template, subject, provider, status, attempts, last_error, created_at, sent_at FROM dev_outbox ORDER BY id DESC LIMIT 100').map((m) => ({ ...m, to_email: mask(m.to_email) })),
+      counts: db().all('SELECT status, COUNT(*) AS n FROM dev_outbox GROUP BY status'),
+    };
+  });
+  app.post('/api/admin/emails/:id/retry', async (req) => {
+    const admin = requireRole(req, ['admin']);
+    const ok = requeue(Number((req.params as any).id));
+    if (!ok) throw new HttpError(409, 'Retry is only possible for failed messages with a configured provider', 'NOT_CONFIGURED');
+    audit(admin.id, 'admin.email_retry', String((req.params as any).id));
+    return { ok: true };
+  });
+
   app.get('/api/admin/compliance', async (req) => {
     requireRole(req, STAFF);
     return {
-      legalGates: CATALOGUE.filter((g) => g.env === 'lounge').map((g) => ({ id: g.id, title: g.title, ...legalGate(g.id) })),
+      legalGates: CATALOGUE.filter((g) => g.env === 'lounge').map((g) => ({ id: g.id, title: g.title, ...legalGate(g.id) })), loungeEnabled: config.loungeEnabled,
       ageAssurance: AGE_ASSURANCE_PROVIDERS, devMode: config.devMode, adultDevPreview: config.adultDevPreview, production: config.production,
       deletionRequests: db().all('SELECT * FROM deletion_requests ORDER BY requested_at DESC LIMIT 50'),
       errors: db().all('SELECT * FROM client_errors ORDER BY id DESC LIMIT 50'),

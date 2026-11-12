@@ -23,6 +23,7 @@ import { hooks } from './sessions';
 import { recordCompletion } from './progression';
 import { newId, newServerSeed } from './secureRng';
 import { track } from './analytics';
+import { config } from './config';
 
 export const EMOTES = ['👍', '🔥', '😮', '😂', '👏', '🤝', 'GG', 'Nice!'];
 const DISCONNECT_FORFEIT_MS = 60_000;
@@ -314,6 +315,9 @@ export async function roomRoutes(app: FastifyInstance) {
   app.get('/api/rooms-meta', async () => ({ emotes: EMOTES }));
 
   app.get('/ws', { websocket: true }, (socket: WebSocket, req) => {
+    // Cross-site WebSocket hijacking defence: browsers always send Origin; it must be our own site.
+    const origin = req.headers.origin;
+    if (origin && !allowedOrigin(origin)) { send(socket, { t: 'error', message: 'Origin not allowed', code: 'FORBIDDEN' }); socket.close(); return; }
     const u = currentUser(req);
     if (!u) { send(socket, { t: 'error', message: 'Sign in to play online', code: 'AUTH_REQUIRED' }); socket.close(); return; }
     let room: Room | null = null;
@@ -407,6 +411,14 @@ export async function roomRoutes(app: FastifyInstance) {
 }
 
 const allSockets = new Map<string, Set<WebSocket>>();
+/** Same-site origins only: the configured public URL plus localhost on the web port (dev). */
+function allowedOrigin(origin: string): boolean {
+  try {
+    const o = new URL(origin);
+    if (o.origin === new URL(config.publicUrl).origin) return true;
+    return !config.production && ['localhost', '127.0.0.1', '[::1]'].includes(o.hostname);
+  } catch { return false; }
+}
 const socketsFor = (uid: string) => [...(allSockets.get(uid) ?? [])];
 export const roomCount = () => rooms.size;
 /** Admin monitoring: live rooms without any personal data beyond display names. */

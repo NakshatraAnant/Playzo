@@ -6,6 +6,7 @@ import { Avatar, Chip, Empty, ErrorBox, GameTile, Modal, useTitle, Coins } from 
 import { Icon } from '../components/Icon';
 import { BY_ID } from '@shared/catalogue';
 import { sfx } from '../lib/sound';
+import { MatchHistory, ReferralCard } from './Engage';
 
 export function Me() {
   useTitle('Your profile');
@@ -27,6 +28,8 @@ export function Me() {
         <div className="col"><Link className="btn" to="/shop"><Icon name="bag" />Customise</Link><Link className="btn btn-ghost" to="/settings"><Icon name="gear" />Settings</Link></div>
       </section>
       {me.isGuest && <div className="panel row"><Icon name="info" /><span style={{ flex: 1 }}>You're playing as a guest. Create an account to protect your progress and unlock friends.</span><Link className="btn btn-primary" to="/register">Save progress</Link></div>}
+      <MatchHistory />
+      <ReferralCard />
       {data && (
         <>
           <section>

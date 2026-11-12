@@ -59,6 +59,8 @@ export const config = {
   sessionDays: 30,
   /** Daily free Fun Chips allowance (Lounge only, non-redeemable, never purchasable). */
   chipsDailyTopUp: 10_000,
+  /** Automated-test environments only: loosens rate limits. Always 1 in production. */
+  rateLimitMultiplier: production ? 1 : Math.max(1, Number(env.PLAYZO_RATE_LIMIT_MULTIPLIER ?? 1)),
 };
 
 if (production && bool(env.PLAYZO_ADULT_DEV_PREVIEW)) {

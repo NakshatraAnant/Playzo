@@ -128,9 +128,12 @@ export function Room() {
   useTitle(`Room ${code}`);
   useEffect(() => {
     let alive = true, retry = 0;
+    let mine: WebSocket | null = null; // the socket owned by THIS effect run (never another run's)
     const connect = async () => {
       await ensureSession();
+      if (!alive) return; // unmounted while waiting: never open an orphan connection
       const s = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
+      mine = s;
       ws.current = s;
       s.onopen = () => { setConn('open'); retry = 0; s.send(JSON.stringify({ t: 'join', code })); };
       s.onmessage = (e) => {
@@ -144,7 +147,12 @@ export function Room() {
       s.onclose = () => { setConn('closed'); if (alive && retry < 15) { retry++; setTimeout(connect, Math.min(5000, 600 * retry)); } };
     };
     connect();
-    return () => { alive = false; ws.current?.send(JSON.stringify({ t: 'leave' })); ws.current?.close(); };
+    return () => {
+      alive = false;
+      const s = mine as WebSocket | null;
+      if (s) { if (s.readyState === 1) s.send(JSON.stringify({ t: 'leave' })); s.close(); }
+      if (ws.current === s) ws.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
   const send = (m: any) => ws.current?.readyState === 1 && ws.current.send(JSON.stringify(m));

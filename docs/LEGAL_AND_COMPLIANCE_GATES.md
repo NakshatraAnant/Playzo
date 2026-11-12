@@ -28,10 +28,20 @@
 | Responsible play | Daily time limit, 1/7/30-day cool-off, 30-minute reality checks, session net always visible, no near-miss engineering, no loss-chasing prompts |
 
 ## Gate mechanics (enforced server-side)
-1. **Environment entitlement:** registered adult (DOB) + adult age assurance + Lounge terms consent + no active cool-off.
-2. **Per-game legal gate:** `PLAYZO_LEGAL_APPROVALS="game-id:LEGAL-REF,..."` in server configuration only (the admin UI cannot open gates).
-   - Without an entry the game returns **451**.
-   - `PLAYZO_ADULT_DEV_PREVIEW=true` unlocks games **on localhost for internal QA only**, with a "NOT LEGALLY APPROVED" banner. It is ignored in production and is **off by default**.
+1. **Master switch:** `PLAYZO_LOUNGE_ENABLED` (server configuration, default **false**). While off, the Lounge is invisible to every ordinary account: no navigation link, 404 on every Lounge page and API, excluded from sitemap and listings.
+2. **Environment entitlement:** registered adult (DOB re-checked on every request) + adult age verification from a **certified provider** (renewed every 365 days) + Lounge terms consent + no active cool-off.
+3. **Two-key per-game legal gate:** a game is public only when `PLAYZO_LEGAL_APPROVALS` lists it with a reference **and** the latest India-law record in Admin → Legal is `approved` with the same reference. Otherwise the server answers **451**. The admin UI can record reviews but cannot change server configuration.
+4. **Internal QA preview:** `PLAYZO_ADULT_DEV_PREVIEW=true` works only on a non-production server and only for accounts with the `admin` or `tester` role. QA accounts may use the clearly labelled dev attestation; every screen shows "DEV PREVIEW · NOT LEGALLY APPROVED". The flag is ignored in production. Ordinary adults are refused the dev attestation (503), so there is no fake verification success.
+5. **Audit:** role changes, attestation use and refusals, legal records, cool-offs and admin actions are written to the append-only audit log.
+
+## Per-game legal review records
+Admin → Legal keeps a history per game and scope (`india_law`, `state_law`, `google_play`, `app_store`) with status (pending, in_review, approved, rejected, blocked), document reference, reviewer and notes. An approval requires both a reference and a reviewer. **As of today no record exists for any game: all 25 are pending.**
+
+| Lounge games | India law | State law | Google Play | App Store |
+|---|---|---|---|---|
+| All 25 (roulette x3, blackjack x2, baccarat, sic bo, hold'em, omaha, teen patti, andar bahar, dragon tiger, three card poker, video poker, slots x6, plinko, dice arena, hi-lo, mines, crash flight) | pending | pending | pending (do not submit) | pending (not prepared) |
+
+Potentially sensitive mechanics to put in front of counsel explicitly: crash-style multiplier games (Crash Flight), Mines, slot machines and jackpot simulation, and any feature where chips could appear to carry value. If counsel considers any of them prohibited even as a free social simulation, record `blocked`; the code stays isolated in internal QA.
 
 ## Open gates (all must be resolved before any public Lounge launch)
 | # | Gate | Owner | Status |

@@ -9,7 +9,7 @@ export interface Me {
   social: { canSearchUsers: boolean; canSendFriendRequests: boolean; canJoinPrivateRooms: boolean; canUsePublicMatchmaking: boolean; canPurchase: boolean };
   loungeDailyLimitMin: number | null;
 }
-interface Providers { google: boolean; apple: boolean; devMode: boolean }
+interface Providers { google: boolean; apple: boolean; devMode: boolean; email?: boolean }
 interface Toast { id: number; text: string; kind?: 'ok' | 'bad' | 'reward' }
 
 interface Store {

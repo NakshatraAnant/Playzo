@@ -3,8 +3,9 @@ import { api } from '../lib/api';
 import { useAsync, useStore } from '../lib/store';
 import { Chip, Empty, Modal, useTitle } from '../components/ui';
 import { Icon } from '../components/Icon';
+import { Rooms, Content, Legal, Emails, System } from './AdminExtra';
 
-const TABS = ['Overview', 'Users', 'Reports', 'Games', 'Economy', 'Ads', 'Compliance', 'Audit'] as const;
+const TABS = ['Overview', 'Users', 'Reports', 'Games', 'Rooms', 'Content', 'Economy', 'Legal', 'Emails', 'Ads', 'System', 'Compliance', 'Audit'] as const;
 
 export default function Admin() {
   useTitle('Admin');
@@ -19,7 +20,12 @@ export default function Admin() {
       {tab === 'Users' && <Users />}
       {tab === 'Reports' && <Reports />}
       {tab === 'Games' && <Games />}
+      {tab === 'Rooms' && <Rooms />}
+      {tab === 'Content' && <Content />}
       {tab === 'Economy' && <Economy />}
+      {tab === 'Legal' && <Legal />}
+      {tab === 'Emails' && <Emails />}
+      {tab === 'System' && <System />}
       {tab === 'Ads' && <Ads />}
       {tab === 'Compliance' && <Compliance />}
       {tab === 'Audit' && <Audit />}
@@ -89,7 +95,8 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
           <p>ZO {data.balances.ZO} · Fun Chips {data.balances.CHIPS}</p>
           <div className="row wrap">
             {data.user.status === 'active' ? <button className="btn btn-danger" onClick={() => act(`/api/admin/users/${id}/status`, { status: 'suspended', reason: 'admin action' })}>Suspend</button> : <button className="btn" onClick={() => act(`/api/admin/users/${id}/status`, { status: 'active' })}>Reactivate</button>}
-            {me?.role === 'admin' && <select className="input" style={{ maxWidth: 160 }} value={data.user.role} onChange={(e) => act(`/api/admin/users/${id}/role`, { role: e.target.value })} aria-label="Role"><option>user</option><option>support</option><option>admin</option></select>}
+            {me?.role === 'admin' && <select className="input" style={{ maxWidth: 160 }} value={data.user.role} onChange={(e) => act(`/api/admin/users/${id}/role`, { role: e.target.value })} aria-label="Role"><option>user</option><option>tester</option><option>support</option><option>admin</option></select>}
+            <button className="btn" onClick={() => act(`/api/admin/users/${id}/revoke-sessions`, {})}>Sign out everywhere</button>
           </div>
           {me?.role === 'admin' && (
             <div className="row wrap"><input className="input" type="number" style={{ maxWidth: 120 }} value={adj.amount} onChange={(e) => setAdj({ ...adj, amount: Number(e.target.value) })} aria-label="ZO amount" /><input className="input" placeholder="Reason (required, audited)" value={adj.reason} onChange={(e) => setAdj({ ...adj, reason: e.target.value })} style={{ flex: 1 }} aria-label="Reason" /><button className="btn" onClick={() => act(`/api/admin/users/${id}/adjust`, adj)}>Adjust ZO</button></div>

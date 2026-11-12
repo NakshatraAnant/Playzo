@@ -33,3 +33,22 @@
 - Ledger posting: `INSERT … ON CONFLICT (idempotency_key) DO NOTHING` plus `SELECT … FOR UPDATE` on `balances`.
 - Wrap ledger postings in `SERIALIZABLE` or row-locked transactions.
 - Partition `analytics_events` by month.
+
+## Migration 002_final_build.sql (additive)
+| Table / change | Purpose |
+|---|---|
+| `game_sessions.paused_at`, `paused_total_ms`, `was_paused` | Pause/resume for solo family games; paused runs are excluded from leaderboards and personal bests |
+| `rooms` (code PK, status, snapshot JSON, version) | Persistent multiplayer rooms: engine state + RNG cursor + members, restored on restart; done/expired rows purged after 7 days |
+| `legal_reviews` | Per-game legal / platform review history (scope, status, reference, reviewer, notes, recorded_by). Documentation only: never unlocks a game by itself |
+| `dev_outbox` + `template`, `provider`, `status`, `attempts`, `last_error`, `sent_at`, `next_attempt_at`, `user_id` | Email delivery log (`outbox_only`, `queued`, `sent`, `failed`) with retry back-off |
+| `notifications`, `users.notify_prefs` | In-app inbox (bounded to 100 per user) and user-controlled preferences |
+| `users.referred_by` | Referral attribution (no rewards) |
+| `auth_throttle` | Per-account login lockout (5 failures / 15 min) |
+| `auth_sessions.user_agent`, `last_used_at` | Device label (coarse, e.g. "Edge on Windows") and last use for the session list |
+| `daily_rewards` (user, day PK) | Daily check-in reward, one row per day |
+| `season_points` (user, season PK) | Monthly season standings by XP |
+| `content_flags` | Admin enable/disable for missions and shop cosmetics |
+| Triggers `ledger_no_update/no_delete`, `audit_no_update/no_delete` | Ledger and audit log are append-only; ledger rows only disappear in an account-deletion cascade |
+| Indexes on `rooms(status, updated_at)`, `match_players(user_id)`, `matches(created_at)`, `legal_reviews`, `dev_outbox(status, next_attempt_at)`, `notifications`, `season_points` | Query paths used by the app |
+
+PostgreSQL mapping for 002: `TEXT` JSON columns → `jsonb`; triggers → `CREATE RULE`/`BEFORE` triggers raising exceptions; `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`.

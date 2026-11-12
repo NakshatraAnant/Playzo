@@ -49,6 +49,9 @@ const COMPONENTS: Record<string, React.LazyExoticComponent<() => React.JSX.Eleme
   plinko: lazy(() => import('./lounge/Plinko')), 'dice-arena': lazy(() => import('./lounge/DiceArena')), 'hi-lo': lazy(() => import('./lounge/HiLo')), mines: lazy(() => import('./lounge/Mines')), 'crash-flight': lazy(() => import('./lounge/CrashFlight')),
 };
 
+/** Replay engines end a run with these actions (submitted and verified like any other input). */
+const END_ACTION: Record<string, any> = { 'obstacle-sprint': { a: 'end' }, 'tower-tactics': { type: 'end' } };
+
 /* ------------------------------------------------------------------ */
 export function Tutorial({ meta, open, onClose }: { meta: GameMeta; open: boolean; onClose: () => void }) {
   return (
@@ -315,6 +318,7 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
         <span className="spacer" />
         {chips !== null && <span className="chip gold mono">{chips.toLocaleString()} chips</span>}
         {pausable && <button className="btn btn-ghost icon-btn" onClick={() => pause()} aria-label="Pause game" data-testid="pause"><Icon name="pause" /></button>}
+        {session?.mode === 'replay' && phase === 'playing' && <button className="btn btn-sm btn-ghost" onClick={() => { if (confirm('Finish this run now and submit your score?')) { const end = END_ACTION[gameId] ?? { end: true }; if (!record(end)) submit(); } }} data-testid="finish-run"><Icon name="flag" size={14} />Finish</button>}
         {meta.env === 'family' && context === 'solo' && (phase === 'playing' || phase === 'done') && <button className="btn btn-ghost icon-btn" onClick={() => setConfirmRestart(true)} aria-label="Restart game" data-testid="restart"><Icon name="refresh" /></button>}
         <button className="btn btn-ghost icon-btn" onClick={() => setTutorialOpen(true)} aria-label="How to play"><Icon name="info" /></button>
       </div>

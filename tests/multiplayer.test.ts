@@ -152,3 +152,16 @@ describe('persistence: rooms survive a server restart', () => {
     A.ws.close(); B.ws.close();
   });
 });
+
+describe('websocket origin check', () => {
+  it('refuses a browser connection from another site (cross-site WebSocket hijacking)', async () => {
+    const a = await user('wsorigin');
+    const ws = new WebSocket(`ws://${base}/ws`, { headers: { cookie: a.cookie, origin: 'https://evil.example' } });
+    const msg = await new Promise<any>((res) => ws.on('message', (d) => res(JSON.parse(d.toString()))));
+    expect(msg).toMatchObject({ t: 'error', code: 'FORBIDDEN' });
+    const ok = new WebSocket(`ws://${base}/ws`, { headers: { cookie: a.cookie, origin: 'http://localhost:5757' } });
+    const hello = await new Promise<any>((res) => ok.on('message', (d) => res(JSON.parse(d.toString()))));
+    expect(hello.t).toBe('hello');
+    ok.close();
+  });
+});
