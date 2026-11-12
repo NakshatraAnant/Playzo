@@ -7,7 +7,8 @@
 ```bash
 npm install
 npm run dev     # http://localhost:5757
-npm test        # 94 automated tests
+npm test        # 184 unit, engine, API and WebSocket tests
+npm run test:e2e  # 114 browser tests (Edge)
 ```
 
 ## Highlights
@@ -21,7 +22,7 @@ npm test        # 94 automated tests
   - Every credit event goes through an atomic, idempotent ledger.
 - **Fair, published maths** for every Lounge game: cryptographic HMAC RNG with commit/reveal, statistically tested.
 - **Age and safety controls:** guest play, under-13 parental consent, adult/minor separation, Lounge invisible to minors, time limits and cool-off.
-- **Original visuals:** 50 vector cover worlds, WebGL hero and dice, procedural Web Audio sound.
+- **Original visuals and sound:** 50 vector cover worlds, WebGL hero and dice, and an adaptive soundtrack composed live for every game (reverb, delay, ducking, hurry-up and pause effects).
 
 ## Documentation
 All docs live in `docs/`:
