@@ -9,6 +9,7 @@
 | Production build (`npm run build`) | Clean, no warnings; main bundle 127 KB gzip; 27 prerendered pages |
 | `npm audit` | 0 vulnerabilities |
 | Restart | Stop/start verified: migrations 001+002 applied, 50 engines, Lounge locked, existing database kept, backup written |
+| Optimised local server (`npm run serve:local`) | Pages and API answer in under 10 ms on localhost (was ~220 ms before binding both loopback addresses); home page DOM ready in 65 ms; 13 MB JS heap |
 
 ## Automated tests: `npm test`
 | Suite | Tests | Covers |
