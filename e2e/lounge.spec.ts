@@ -85,7 +85,7 @@ async function click(page: Page, name: RegExp) {
 }
 async function clickIfVisible(page: Page, name: RegExp) {
   const b = page.locator('.stage-body').getByRole('button', { name }).first();
-  if (await b.isVisible({ timeout: 2500 }).catch(() => false) && await b.isEnabled().catch(() => false)) { await b.click(); return true; }
+  if (await b.isVisible({ timeout: 2500 }).catch(() => false) && await b.isEnabled().catch(() => false)) return b.click({ timeout: 3000 }).then(() => true, () => false); // the round may end first
   return false;
 }
 

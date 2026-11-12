@@ -4,8 +4,8 @@
 | Check | Result |
 |---|---|
 | TypeScript (`npm run typecheck`) | Clean |
-| Unit, engine, statistical, API and WebSocket tests (`npm test`) | **184 / 184 passing** (9 files) |
-| Browser tests (`npm run test:e2e`, Playwright on Microsoft Edge) | **114 / 114 passing** (full run: 113 + the one failure fixed and re-run; smoke re-run 24/24 on desktop and phone) |
+| Unit, engine, statistical, API, WebSocket and performance tests (`npm test`) | **188 / 188 passing** (10 files) |
+| Browser tests (`npm run test:e2e`, Playwright on Microsoft Edge) | **114 / 114 passing** (latest full run 111/114; the 3 failures — one real pause-over-results bug and two test races — fixed and re-run, plus a 12-game regression run) |
 | Production build (`npm run build`) | Clean, no warnings; main bundle 127 KB gzip; 27 prerendered pages |
 | `npm audit` | 0 vulnerabilities |
 | Restart | Stop/start verified: migrations 001+002 applied, 50 engines, Lounge locked, existing database kept, backup written |
@@ -20,7 +20,8 @@
 | `fairness.test.ts` | 25 | Monte Carlo vs published RTP (z-tests), chi-square uniformity, exact slot RTP, crash distribution, outcome independence from balance |
 | `api.test.ts` | 22 | Auth, CSRF, guest upgrade, under-13 flow, sessions, replay verification, Lounge invisibility, **QA-role preview, two-key legal gate, verification expiry**, cool-off, ledger, shop, social safety, admin RBAC, deletion, SEO |
 | `platform.test.ts` | 15 | Login lockout, session list/revoke, password change signs out other devices, outbox honesty, referrals (no payout), notifications + preferences, daily reward, seasons, pause/resume (deadline shift, paused runs not ranked), append-only ledger/audit log |
-| `multiplayer.test.ts` | 6 | Two real WebSocket clients play to a result; emotes only; race rooms; **rooms restored after a simulated restart with the board intact and exactly one match record**; lobby reconnect; **cross-site WebSocket Origin rejected** |
+| `multiplayer.test.ts` | 7 | Two real WebSocket clients play to a result; emotes only; race rooms; **rooms restored after a simulated restart with the board intact and exactly one match record**; lobby reconnect; **cross-site WebSocket Origin rejected**; **quick match pairs two players, refuses guests, keeps adults and teens apart** |
+| `performance.test.ts` | 3 | Chess AI reply time stays within its budget at every level |
 | `music.test.ts` | 9 | Soundtrack for all 50 games, unique deterministic themes, notes in key, adaptive layering, urgency, memory-game caps, calm Lounge audio, no win sounds for partial returns |
 
 ## Browser tests: `npm run test:e2e` (Edge, isolated instance with an in-memory database)
@@ -45,6 +46,9 @@
 8. Pages overflowed by up to 59px on 360-375px phones (segmented controls, home cards, tab bar).
 9. Copy claimed reset/verification emails were "on their way" when no provider exists.
 10. Walking bass played a note outside the key (caught by the music tests).
+12. A run that ended right after pressing Pause left the pause overlay over the results screen.
+13. Chess AI on Hard could block the server for ~1 s (now a 220 ms budget).
+14. The web dev server started before the API, so first loads showed 502 errors.
 11. Lounge played celebratory sounds for returns smaller than the stake and a jackpot fanfare (now neutral cues).
 
 ## Manual checks

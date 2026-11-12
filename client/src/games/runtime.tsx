@@ -278,15 +278,26 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
     else music.stop(1.2);
   }, [phase, gameId, run]);
   useEffect(() => { music.setUrgency(0); }, [run]);
+  // A run can end (crash, last answer) in the instant after Pause is pressed: never leave the
+  // pause overlay sitting on top of the results screen.
+  useEffect(() => {
+    if (phase !== 'playing' && pausedAt.current !== null) {
+      pausedAt.current = null;
+      setPaused(false);
+      music.resume();
+    }
+  }, [phase]);
   useEffect(() => () => music.stop(0.6), [gameId]);
 
   const pause = useCallback(async () => {
     if (!session || pausedAt.current !== null || phase !== 'playing' || meta.env !== 'family' || context !== 'solo') return;
+    // The run already ended and is about to be submitted: nothing to pause.
+    if (finishing.current || (local.current && REPLAY_ENGINES[gameId]?.isOver(local.current.state))) return;
     pausedAt.current = performance.now();
     music.pause();
     setPaused(true);
     api.post(`/api/sessions/${session.sessionId}/pause`).catch(() => undefined);
-  }, [session, phase, meta.env, context]);
+  }, [session, phase, meta.env, context, gameId]);
   const resumeGame = useCallback(async () => {
     if (!session || pausedAt.current === null) return;
     try {

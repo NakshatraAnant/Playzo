@@ -130,7 +130,7 @@ test.describe('server-authoritative word, quiz and party games', () => {
         for (let i = 0; i < 12; i++) {
           if (await page.getByText('Server-authoritative result').isVisible().catch(() => false)) break;
           const g = page.getByRole('button', { name: /Show a route|Give up/i });
-          if (await g.isVisible().catch(() => false)) await g.click();
+          if (await g.isVisible().catch(() => false)) await g.click({ timeout: 3000 }).catch(() => undefined); // results may replace the button
           await page.waitForTimeout(250);
         }
         await expect(page.getByText('Server-authoritative result')).toBeVisible();

@@ -11,6 +11,12 @@ npm run dev                 # web http://localhost:5757  ·  API http://127.0.0.
 ```
 Migrations run automatically when the API starts (`server/migrations/*.sql`, applied once, in order, inside a transaction). They are additive only. Seed data is configuration only (ad placements + the optional admin from `.env`); **no fake players, scores or activity are ever seeded**.
 
+## Two ways to run locally
+| Mode | Command | When to use |
+|---|---|---|
+| **Optimised local (recommended for playing)** | `npm run local` (build + serve) or `npm run serve:local` (serve the existing build) | One Node process on http://localhost:5757 serving the built app and the API: Brotli-compressed files, long-lived caching of hashed assets, service worker, fastest page loads. Dev features (email outbox, QA preview flag) still work |
+| Development | `npm run dev` | Live reload while editing code. The web server waits until the API is healthy, so the first page load never sees a 502 |
+
 ## URLs
 | What | URL |
 |---|---|
@@ -29,11 +35,11 @@ Migrations run automatically when the API starts (`server/migrations/*.sql`, app
 | `npm run typecheck` | TypeScript |
 | `npm run build` | Client build + SEO prerender + pre-compression into `dist/` |
 | `npm start` | Production mode: one Node process serving `dist/` + API (dev-only features refused) |
-| `npm run backup:db` | Online database backup (`VACUUM INTO`) to `data/backups/`, keeps the latest 14 |
+| `npm run backup:db` | Online database backup (`VACUUM INTO`) to `data/backups/`, keeps the latest 14. Backups also run automatically once a day while the API is running (`PLAYZO_AUTO_BACKUP=false` to disable) |
 | `npm run gdd` / `npm run rtp` | Regenerate game docs / print Lounge mathematics |
 
 ## Backup and restore
-- **Backup:** `npm run backup:db` (safe while the server runs). Schedule it with Windows Task Scheduler for regular backups.
+- **Backup:** automatic daily while the API runs; on demand with `npm run backup:db` or Admin → System → Back up now (safe while the server runs).
 - **Restore:** stop the server, copy the chosen file from `data/backups/` to `data/playzo.db` (keep the old file aside; delete `data/playzo.db-wal` and `-shm` only after the copy), then start the server. Migrations newer than the backup are applied automatically.
 
 ## Restart behaviour

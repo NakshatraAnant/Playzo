@@ -6,8 +6,8 @@
 
 ```bash
 npm install
-npm run dev     # http://localhost:5757
-npm test        # 184 unit, engine, API and WebSocket tests
+npm run local   # optimised build on http://localhost:5757 (or: npm run dev for live reload)
+npm test        # 188 unit, engine, API, WebSocket and performance tests
 npm run test:e2e  # 114 browser tests (Edge)
 ```
 
