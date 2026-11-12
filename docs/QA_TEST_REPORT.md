@@ -1,67 +1,58 @@
-# QA Test Report (2026-11-12)
+# QA Test Report (2026-11-12, final build)
 
-## Automated: `npm test` → **94 tests, 5 files, all passing**
+## Summary
+| Check | Result |
+|---|---|
+| TypeScript (`npm run typecheck`) | Clean |
+| Unit, engine, statistical, API and WebSocket tests (`npm test`) | **184 / 184 passing** (9 files) |
+| Browser tests (`npm run test:e2e`, Playwright on Microsoft Edge) | **114 / 114 passing** (full run: 113 + the one failure fixed and re-run; smoke re-run 24/24 on desktop and phone) |
+| Production build (`npm run build`) | Clean, no warnings; main bundle 127 KB gzip; 27 prerendered pages |
+| `npm audit` | 0 vulnerabilities |
+| Restart | Stop/start verified: migrations 001+002 applied, 50 engines, Lounge locked, existing database kept, backup written |
+
+## Automated tests: `npm test`
 | Suite | Tests | Covers |
 |---|---|---|
-| `tests/replayEngines.test.ts` | 23 | Determinism of all 12 replay engines; maze solvability; Grid Genius has a unique solution and completes; Logic Lock solvability; anti-cheat (superhuman timing, input during playback, out-of-order logs); **Obstacle Sprint: client simulation == server replay, frame for frame**; Tower Tactics determinism; Block Battle |
-| `tests/serverEngines.test.ts` | 21 | Registry = 50 engines (25 + 25); full chess rules (fool's mate + SAN, castling, en passant, promotion, stalemate, illegal moves, AI reply); Code Breaker grading and secret redaction; Hex connection and AI; Connect Five; Territory scoring and extra turns; Trivia server timing and deadline rejection; answer redaction; dictionary; Word Ladder solvability; Emoji tolerant matching; Memory Duel turns and redaction |
-| `tests/fairness.test.ts` | 25 | Monte Carlo with the production HMAC RNG vs published RTP (z-test, \|z\| < 4.5); chi-square uniformity (roulette pockets, die faces); slot exact RTP vs observed (6 machines); crash distribution; **outcome independence from balance**; RNG cursor resumability |
-| `tests/api.test.ts` | 22 | Health; CSRF; guest → account keeps progress; login, reset revoking sessions; under-13 parental flow; server-mode session (redaction, validation, XP); replay verification + tampered-log rejection (`TOO_FAST`); daily seed; **Lounge invisible to guests and teens (404)**; age assurance + terms; **legal gate 451**; approved game (test reference) plays with a correct ledger; seed reveal matches the commitment; cool-off; ledger idempotency and no negative balances; shop; adult/minor friend block; blocking; reports; challenge seeds; admin RBAC; account deletion cascade; SEO sitemap/robots |
-| `tests/multiplayer.test.ts` | 3 | **Two real WebSocket clients:** create → join → ready → start → Connect Five to a win → results persisted in both histories; emotes-only enforcement; race room with the same seed and verified scores |
+| `replayEngines.test.ts` | 25 | Determinism of the 12 replay engines, solvability, anti-cheat timing, client simulation == server replay |
+| `serverEngines.test.ts` | 21 | Registry (50), full chess rules, Code Breaker, Hex, Connect Five, Territory, Trivia timing, redaction, dictionary, Word Ladder, Emoji matching, Memory Duel |
+| `familyComplete.test.ts` | 28 | **All 25 family games played to game over** (simulated server clock for timed games), replay logs re-verified by the server, tampering rejected; all 25 start through HTTP |
+| `loungeRules.test.ts` | 33 | **Individual rule tests for all 25 Lounge games**: valid rounds fully ledgered, invalid actions rejected, stakes above balance refused, hidden information never in the view, reproducible for a fixed seed |
+| `fairness.test.ts` | 25 | Monte Carlo vs published RTP (z-tests), chi-square uniformity, exact slot RTP, crash distribution, outcome independence from balance |
+| `api.test.ts` | 22 | Auth, CSRF, guest upgrade, under-13 flow, sessions, replay verification, Lounge invisibility, **QA-role preview, two-key legal gate, verification expiry**, cool-off, ledger, shop, social safety, admin RBAC, deletion, SEO |
+| `platform.test.ts` | 15 | Login lockout, session list/revoke, password change signs out other devices, outbox honesty, referrals (no payout), notifications + preferences, daily reward, seasons, pause/resume (deadline shift, paused runs not ranked), append-only ledger/audit log |
+| `multiplayer.test.ts` | 6 | Two real WebSocket clients play to a result; emotes only; race rooms; **rooms restored after a simulated restart with the board intact and exactly one match record**; lobby reconnect; **cross-site WebSocket Origin rejected** |
+| `music.test.ts` | 9 | Soundtrack for all 50 games, unique deterministic themes, notes in key, adaptive layering, urgency, memory-game caps, calm Lounge audio, no win sounds for partial returns |
 
-Static checks: `npm run typecheck` (TypeScript 7) clean · `npm run build` clean · `npm audit` 0 vulnerabilities.
+## Browser tests: `npm run test:e2e` (Edge, isolated instance with an in-memory database)
+| Spec | Desktop (1366px) | Phone (390px) | Covers |
+|---|---|---|---|
+| `smoke` | 12 | 12 | Every main route renders without errors; navigation; Lounge not linked/listed/reachable; **no horizontal overflow at 360, 375, 390, 430, 768, 1024, 1440, 1920px**; SEO tags and security headers |
+| `auth` | 3 | 3 | Register → welcome → settings (sessions, verification state) → inbox → sign out/in → reset password via outbox (UI says nothing was emailed) → delete account; daily reward once; lockout message |
+| `family` | 26 | 26 | **All 25 family games**: discovery page → instructions → start → input → pause/resume → finish (replay) / resign (strategy) / give up (Word Ladder) → results → restart; daily puzzle cannot be paused |
+| `lounge` | 26 | - | Ordinary adults refused the dev attestation, minors 404; **all 25 Lounge games** played one real round by a tester account in internal QA preview with "NOT LEGALLY APPROVED" banners |
+| `multiplayer` | 2 | - | Two browsers: create room → join by code → ready → start → move → emote (exactly one per message) → resign → result in both match histories → rematch; reload mid-match reconnects |
+| `admin` | 2 | - | Every admin tab loads; System tab never shows secrets; legal record cannot open a game; normal users get 403 from every admin endpoint |
+| `music` | 2 | - | Six family games each start their own different theme; pause, in-game toggle and Settings previews control the music |
 
-### Fairness: observed vs theoretical (`docs/fairness-results.txt`)
-| Game / bet | n | Observed | Theoretical | z |
-|---|---|---|---|---|
-| EU roulette red | 60k | 96.69% | 97.30% | -1.50 |
-| US roulette red | 60k | 94.39% | 94.74% | -0.86 |
-| FR roulette red (La Partage) | 60k | 98.47% | 98.65% | -0.45 |
-| Sic Bo small | 60k | 97.03% | 97.22% | -0.46 |
-| Dice Arena over 7 | 60k | 98.07% | 97.92% | 0.32 |
-| Baccarat banker / player / tie | 80k | 98.88 / 99.15 / 85.69% | 98.94 / 98.76 / 85.64% | -0.18 / 1.16 / 0.05 |
-| Dragon Tiger dragon | 80k | 96.08% | 96.27% | -0.54 |
-| Andar / Bahar | 60k | 98.10% / 97.28% | (measured) | - |
-| Blackjack (basic strategy, pooled) | 60k hands | 99.60% | ~99.5% | - |
-| Three Card Poker (Q-6-4, pooled) | 60k | 97.86% | ~97.98% | - |
-| Slots: classic / adventure / vault / cosmic / neon / mystery | 120k each | 97.60 / 95.82 / 96.12 / 96.07 / 96.64 / 94.92% | 94.52 / 95.40 / 95.84 / 96.42 / 96.49 / 95.59% | 0.79 / 0.54 / 0.43 / -0.73 / 0.19 / -0.18 |
-| Plinko 12/medium | 80k | 98.17% | 97.76% | 1.43 |
-| Hi-Lo single call | 60k | 97.73% | 98.00% | -0.98 |
-| Mines (3 mines, 2 tiles) | 60k | 98.19% | 97.79% | 1.84 |
+## Bugs found and fixed in this pass
+1. Lounge QA preview was open to any verified adult (now admin/tester only) and the dev attestation could fake verification (now refused).
+2. One Lounge config key opened a game (now a three-key gate).
+3. No per-account login lockout; password change kept other sessions alive.
+4. No WebSocket Origin check.
+5. Room page could leave an orphaned second socket (every message twice).
+6. Guest-session race: starting a game on a first visit could fail with "Already signed in".
+7. Fact or Fiction rendered duplicate React keys.
+8. Pages overflowed by up to 59px on 360-375px phones (segmented controls, home cards, tab bar).
+9. Copy claimed reset/verification emails were "on their way" when no provider exists.
+10. Walking bass played a note outside the key (caught by the music tests).
+11. Lounge played celebratory sounds for returns smaller than the stake and a jackpot fanfare (now neutral cues).
 
-Theoretical and observed returns are reported separately. The high-volatility slots (classic, mystery) have wide confidence intervals at this sample size.
-
-## Manual browser QA (built-in browser)
-| Journey step | Result |
-|---|---|
-| 1 Open site → home (3D hero, daily puzzle, rails) | Pass (desktop 1024 and mobile 375) |
-| 2-3 Register / onboarding | Guest auto-session pass; registration covered by API tests; Lounge QA account registered via API |
-| 4-6 Open game → complete → achievement | Pass: Number Rush full 60s run → "Score verified by server replay", +46 XP, +10 ZO, 2 achievements |
-| 7 Return to dashboard | Pass |
-| 8-11 Invite friend → join → both complete → results saved | Pass via the WebSocket E2E test (two real clients); room UI rendered in the browser |
-| 12 Log out / return | API test pass |
-| 13 Account deletion | API test pass |
-| Age-restricted: Lounge gate flow | Pass: DOB-only adult blocked → dev attestation → terms → catalogue with legal-gate banners |
-| Lounge play (dev preview, internal QA only) | European Roulette spin settled server-side ("32 red · returned 100 of 50"); Cosmic Reels 243-ways win evaluation and highlight |
-| Chess vs AI on mobile | Pass (1. e4 e5) |
-| Responsive | 375px: no horizontal overflow, tab bar within the viewport; desktop rail layout |
-
-### Bugs found and fixed during QA
-1. Hero 3D orb overlapped the headline → aspect-aware placement + readability scrim.
-2. Horizontal rails bled under the desktop side rail → margins reset at 1024px+.
-3. API not yet up on first load produced an uncaught error → handled, with retry.
-4. Achievement ids shown instead of titles → titles returned by the server.
-5. "Live" badge on solo-capable games → renamed "Multiplayer".
-6. Literal `→` / `·` text in JSX → real characters.
-7. Production static server conflicted with dynamic sitemap routes → static files in production.
-8. JS served uncompressed → build-time Brotli/gzip (main bundle 545 KB → 152 KB transfer).
-9. Plinko table rounding drifted to 97.06% → finer rounding (all tables 97.76-98.19%).
-10. Dice face orientation math corrected; obstacle-sprint end action after death accepted.
-11. Lounge copy mismatched the paytables (Sic Bo doubles/triples, TCP RTP) → corrected and generated from code.
-
-## Performance (production build, localhost)
-TTFB 17 ms · First Contentful Paint 0.56 s · Largest Contentful Paint 1.89 s · JS heap 11 MB · Discover route renders 25 tiles in under 1.2 s · Three.js (142 KB gzip) loads only where 3D is used. These are localhost figures; real-network numbers require a deployed environment.
+## Manual checks
+- Live soundtrack check in the browser: Geography Sprint plays its "Adventure explorer" theme (98 BPM), sinks under pause and returns on resume.
+- Mobile layout measured at 360px and 375px on the running app (no page wider than the viewport).
 
 ## Not tested
-- No automated Playwright suite: the browser pass was manual, on a sample of screens. Not every one of the 50 game UIs was played to completion in a browser (all 50 engines are covered by automated tests).
-- Screen-reader audit, cross-browser (Safari / Firefox), real devices, load testing, penetration test.
+- Safari, Firefox and real phones (only Edge/Chromium was available without downloads).
+- Audible quality of the synthesised music on different speakers (tests check the engine, not sound output).
+- Live email/OAuth/payment/age-verification providers (none configured).
+- Load testing and an independent penetration test.

@@ -49,7 +49,7 @@ export default function Home() {
           )}
 
           <section className="row wrap" style={{ alignItems: 'stretch', gap: 16 }}>
-            <motion.div whileHover={{ y: -3 }} className="panel" style={{ flex: '1 1 min(320px, 100%)', minWidth: 0, display: 'grid', gridTemplateColumns: '110px 1fr', gap: 16, alignItems: 'center' }}>
+            <motion.div whileHover={{ y: -3 }} className="panel" style={{ flex: '1 1 min(320px, 100%)', minWidth: 0, display: 'grid', gridTemplateColumns: 'clamp(72px, 26%, 110px) minmax(0, 1fr)', gap: 14, alignItems: 'center' }}>
               <div style={{ borderRadius: 16, overflow: 'hidden', aspectRatio: '4/5' }}><GameCover id={data.daily.gameId} /></div>
               <div className="col" style={{ gap: 8 }}>
                 <span className="chip on" style={{ width: 'fit-content' }}><Icon name="calendar" size={14} />Daily Puzzle · {data.daily.day}</span>

@@ -40,7 +40,7 @@ const Lounge = lazy(() => L().then((m) => ({ default: m.Lounge })));
 const LoungeGame = lazy(() => L().then((m) => ({ default: m.LoungeGame })));
 const LoungePlay = lazy(() => L().then((m) => ({ default: m.LoungePlay })));
 const Admin = lazy(() => import('./pages/Admin'));
-const Notifications = lazy(() => import('./pages/Engage').then((m) => ({ default: m.Notifications })));
+import { Notifications } from './pages/Engage';
 const Legal = lazy(() => import('./pages/Legal'));
 
 class Boundary extends Component<{ children: ReactNode }, { err: Error | null }> {

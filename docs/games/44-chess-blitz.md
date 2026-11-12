@@ -70,7 +70,7 @@ None required; 2D vector / canvas presentation chosen for performance on mid-ran
 Spring-based UI transitions (framer-motion), state-change micro-animations; reduced-motion users get instant transitions.
 
 ## 20. Sound requirements
-Procedural Web Audio effects (`client/src/lib/sound.ts`); global mute.
+Original adaptive theme "Baroque chamber": F# harmonicMinor, 94 BPM; strings pad, walking bass, harpsi arpeggio, flute lead. Music builds up during play, tightens when the clock runs low, sinks under pause and ends with a result stinger. Effects: procedural Web Audio (`client/src/lib/sound.ts`) through a reverb, delay and compressor bus with music ducking. Separate music and effects volume, in-game music toggle, global mute.
 
 ## 21. Backend requirements
 State stored in `game_sessions.state`; actions via POST /api/sessions/:id/action.

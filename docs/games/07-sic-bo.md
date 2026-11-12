@@ -70,7 +70,7 @@ WebGL dice (client/src/three/Dice3D.tsx), canvas-generated pip textures, eased t
 Spring-based UI transitions (framer-motion), state-change micro-animations; reduced-motion users get instant transitions.
 
 ## 20. Sound requirements
-Procedural Web Audio effects (`client/src/lib/sound.ts`); global mute.
+Original adaptive theme "Lantern garden": D# minorPent, 82 BPM; glass pad, sub bass, shaker drums, kalimba arpeggio, flute lead. Lounge rule: calm level, no escalating layers; returns below the stake use a neutral cue, never a win sound. Music builds up during play, tightens when the clock runs low, sinks under pause and ends with a result stinger. Effects: procedural Web Audio (`client/src/lib/sound.ts`) through a reverb, delay and compressor bus with music ducking. Separate music and effects volume, in-game music toggle, global mute.
 
 ## 21. Backend requirements
 State stored in `game_sessions.state`; actions via POST /api/sessions/:id/action; RNG = HMAC-SHA256 stream with committed seed; stakes/payouts settled through the idempotent CHIPS ledger.

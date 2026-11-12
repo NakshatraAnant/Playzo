@@ -21,6 +21,8 @@
 | KI-17 | High (production) | No independent penetration test | Internal review in SECURITY_AUDIT.md | NOT STARTED |
 | KI-18 | Low | Quick match has no automated two-client test | Manually exercised; rooms/races are fully tested | PARTIAL |
 | KI-19 | Info | Browser tests run on Microsoft Edge (Chromium) only; Safari/Firefox and real phones not tested | Install other Playwright browsers when network downloads are acceptable | PARTIAL |
+| KI-21 | Info | Music is synthesised live, not recorded by musicians or produced with sample libraries; quality depends on the device's speakers. Automated tests check the music engine's state and harmony rules, not the audible output | An optional pass with commissioned recorded stems could replace styles later; the engine already supports per-game themes | OPEN |
+| KI-22 | Low | Browsers block audio until the first tap/click on the page, so a game opened directly by URL starts its music on the first interaction | Standard browser autoplay policy | OPEN |
 | KI-20 | Low | Certified age verification provider not integrated | Lounge fails closed: no non-QA adult can be verified | BLOCKED (vendor + legal) |
 
 ## Recommended next steps

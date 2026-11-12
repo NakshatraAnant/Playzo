@@ -60,7 +60,8 @@ No AI image/video generation tool was available in this environment (inspected: 
 | Slot symbol set (40 symbols) | 6 slot games | Vector (SVG) | Original | Vector | client/src/games/lounge/Slots.tsx | Owned | Reels, paytables |
 | Avatars (12 orbs), frames, themes | Platform | CSS gradients | Original | Vector | shared/cosmetics.ts | Owned | Profiles, shop |
 | Icon set (50 icons) | Platform | SVG paths | Original | 24px grid | client/src/components/Icon.tsx | Owned | UI |
-| Sound effects | All games | Procedural Web Audio synthesis | Original | Runtime | client/src/lib/sound.ts | Owned | All games |
+| Sound effects and mix bus (reverb from a generated impulse, ping-pong delay, compressor, ducking) | All games | Procedural Web Audio synthesis | Original | Runtime | client/src/lib/sound.ts | Owned | All games |
+| Adaptive soundtrack: 18 styles, a unique theme for each of 50 games | All games | Procedural composition + synthesis (FM bells and mallets, analogue pads, basses, sitar-like pluck, tanpura drone, drum and tabla kits) | Original; composed from a seed per game | Runtime | client/src/lib/musicTheory.ts, client/src/lib/music.ts | Owned | All games, Settings previews |
 | Rhythm Rush music | Rhythm Rush | Procedural composition | Original, seeded per chart | Runtime | client/src/games/family/RhythmRush.tsx | Owned | Rhythm Rush |
 | Fonts: Unbounded, Plus Jakarta Sans | Platform | Web fonts | Google Fonts | - | fonts.googleapis.com | SIL Open Font License 1.1 | Typography |
 | Emoji glyphs (Emoji Decode, Memory Duel, flags) | 3 games | System emoji font | Rendered by the player's OS | - | server/data/emoji.ts, geo.ts | OS font licence | Gameplay content (Unicode characters, not bundled images) |

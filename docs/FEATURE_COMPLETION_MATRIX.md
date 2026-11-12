@@ -41,6 +41,15 @@ Evidence: `U` unit/engine tests · `I` API integration tests · `W` WebSocket te
 | Server-side score validation (replay verification, server-authoritative state) | COMPLETE | U, I | |
 | 25 Lounge simulations: individual rule tests + statistical RTP tests | COMPLETE | U, E (QA) | Disabled for the public |
 
+## Sound and music
+| Feature | Status | Evidence | Notes |
+|---|---|---|---|
+| Adaptive soundtrack for every game (49 composed themes + Rhythm Rush's own beat-matched track) | COMPLETE | U (music.test.ts), E (music.spec.ts), M (live check) | Procedurally composed and synthesised on the device; no recorded audio files |
+| Mix bus: generated-impulse reverb, tempo-synced ping-pong delay, glue compressor, music ducking under effects | COMPLETE | M | |
+| Adaptive layers, hurry-up when the clock is low, underwater pause, result stingers, room lobby/match music | COMPLETE | U, E | |
+| Music/effects volume, in-game music toggle, optional hub theme, style previews | COMPLETE | E | |
+| Responsible Lounge audio (calm level, no escalation, neutral cue for returns below the stake, no jackpot fanfare) | COMPLETE | U (source checks) | |
+
 ## Multiplayer
 | Feature | Status | Evidence | Notes |
 |---|---|---|---|

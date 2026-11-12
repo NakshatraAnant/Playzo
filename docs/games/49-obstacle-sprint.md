@@ -70,7 +70,7 @@ None required; 2D vector / canvas presentation chosen for performance on mid-ran
 Spring-based UI transitions (framer-motion), canvas render loop at display refresh; reduced-motion users get instant transitions.
 
 ## 20. Sound requirements
-Procedural Web Audio effects (`client/src/lib/sound.ts`); global mute.
+Original adaptive theme "Neon synthwave": E minor, 121 BPM; glass pad, pulse bass, four drums, pluck arpeggio, square lead. Music builds up during play, tightens when the clock runs low, sinks under pause and ends with a result stinger. Effects: procedural Web Audio (`client/src/lib/sound.ts`) through a reverb, delay and compressor bus with music ducking. Separate music and effects volume, in-game music toggle, global mute.
 
 ## 21. Backend requirements
 Session start returns a seed; POST /submit re-simulates the action log with the same engine (`verifyReplay`), enforcing timeline/wall-clock and engine plausibility rules.

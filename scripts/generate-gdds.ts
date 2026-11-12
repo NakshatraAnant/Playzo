@@ -8,6 +8,18 @@ import path from 'node:path';
 import { CATALOGUE, GameMeta } from '../shared/catalogue';
 import { ENGINES } from '../server/games/registry';
 import { loungeMath } from '../server/loungeMath';
+import { buildTheme, GAME_STYLE, INTENSITY_CAP } from '../client/src/lib/musicTheory';
+
+const NOTE = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+function musicLine(id: string): string {
+  const t = buildTheme(id);
+  if (!t) return 'Own beat-matched backing track composed from the chart seed (client/src/games/family/RhythmRush.tsx).';
+  const s = t.style;
+  const parts = [s.pad && `${s.pad} pad`, s.bass && `${s.bass} bass`, s.drums && `${s.drums} drums`, s.arp && `${s.arp} arpeggio`, s.lead && `${s.lead} lead`].filter(Boolean).join(', ');
+  const cap = INTENSITY_CAP[id] !== undefined ? ' Capped to pad and bass so it never competes with the tones or patterns the player memorises.' : '';
+  const lounge = s.id.startsWith('lounge') ? ' Lounge rule: calm level, no escalating layers; returns below the stake use a neutral cue, never a win sound.' : '';
+  return `Original adaptive theme "${s.label}": ${NOTE[t.root % 12]} ${s.mode}, ${t.tempo} BPM; ${parts}.${cap}${lounge}`;
+}
 
 const out = path.resolve('docs/games');
 fs.mkdirSync(out, { recursive: true });
@@ -121,7 +133,7 @@ ${['dice-arena', 'sic-bo'].includes(g.id) ? 'WebGL dice (client/src/three/Dice3D
 Spring-based UI transitions (framer-motion), ${['obstacle-sprint', 'rhythm-rush', 'tower-tactics', 'plinko', 'crash-flight'].includes(g.id) ? 'canvas render loop at display refresh' : 'state-change micro-animations'}; reduced-motion users get instant transitions.
 
 ## 20. Sound requirements
-Procedural Web Audio effects (\`client/src/lib/sound.ts\`)${g.id === 'rhythm-rush' ? ' plus a procedurally composed backing track scheduled on the audio clock' : ''}; global mute.
+${musicLine(g.id)} Music builds up during play, tightens when the clock runs low, sinks under pause and ends with a result stinger. Effects: procedural Web Audio (\`client/src/lib/sound.ts\`) through a reverb, delay and compressor bus with music ducking. Separate music and effects volume, in-game music toggle, global mute.
 
 ## 21. Backend requirements
 ${e.mode === 'replay' ? 'Session start returns a seed; POST /submit re-simulates the action log with the same engine (`verifyReplay`), enforcing timeline/wall-clock and engine plausibility rules.' : `State stored in \`game_sessions.state\`; actions via POST /api/sessions/:id/action${lounge ? '; RNG = HMAC-SHA256 stream with committed seed; stakes/payouts settled through the idempotent CHIPS ledger' : ''}.`}
@@ -172,7 +184,8 @@ ${CATALOGUE.map((g) => `| Cover art: ${g.theme.world} | ${g.title} | Vector illu
 | Slot symbol set (40 symbols) | 6 slot games | Vector (SVG) | Original | Vector | client/src/games/lounge/Slots.tsx | Owned | Reels, paytables |
 | Avatars (12 orbs), frames, themes | Platform | CSS gradients | Original | Vector | shared/cosmetics.ts | Owned | Profiles, shop |
 | Icon set (50 icons) | Platform | SVG paths | Original | 24px grid | client/src/components/Icon.tsx | Owned | UI |
-| Sound effects | All games | Procedural Web Audio synthesis | Original | Runtime | client/src/lib/sound.ts | Owned | All games |
+| Sound effects and mix bus (reverb from a generated impulse, ping-pong delay, compressor, ducking) | All games | Procedural Web Audio synthesis | Original | Runtime | client/src/lib/sound.ts | Owned | All games |
+| Adaptive soundtrack: 18 styles, a unique theme for each of ${Object.keys(GAME_STYLE).length} games | All games | Procedural composition + synthesis (FM bells and mallets, analogue pads, basses, sitar-like pluck, tanpura drone, drum and tabla kits) | Original; composed from a seed per game | Runtime | client/src/lib/musicTheory.ts, client/src/lib/music.ts | Owned | All games, Settings previews |
 | Rhythm Rush music | Rhythm Rush | Procedural composition | Original, seeded per chart | Runtime | client/src/games/family/RhythmRush.tsx | Owned | Rhythm Rush |
 | Fonts: Unbounded, Plus Jakarta Sans | Platform | Web fonts | Google Fonts | - | fonts.googleapis.com | SIL Open Font License 1.1 | Typography |
 | Emoji glyphs (Emoji Decode, Memory Duel, flags) | 3 games | System emoji font | Rendered by the player's OS | - | server/data/emoji.ts, geo.ts | OS font licence | Gameplay content (Unicode characters, not bundled images) |
