@@ -238,6 +238,7 @@ function chargeClock(s: ChessState, now: number) {
 
 export const chessBlitz: Engine<ChessState, A> = {
   id: 'chess-blitz', rulesVersion: '1.0.0', mode: 'server', players: { min: 1, max: 2 }, timed: true,
+  shiftTime: (s, dt) => { s.lastAt += dt; return s; },
   init(o, ctx) {
     const solo = o.players.length === 1;
     const players = solo ? [o.players[0], 'ai'] : o.players.slice(0, 2);

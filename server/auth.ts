@@ -4,9 +4,11 @@ import { db, nowIso } from './db';
 import { config } from './config';
 import { HttpError, User, currentUser, requireUser, str, rateLimit, audit, SESSION_COOKIE } from './http';
 import { sha256, randomToken, newId } from './secureRng';
-import { ageOn, bandFor, loungeAccess, socialPolicy, AGE_ASSURANCE_PROVIDERS } from './access';
+import { ageOn, bandFor, loungeAccess, socialPolicy, AGE_ASSURANCE_PROVIDERS, isQaPreview } from './access';
 import { balance } from './economy';
 import { track } from './analytics';
+import { sendEmail, emailStatus } from './email';
+import { notify, prefsFor } from './notify';
 
 export const TERMS_VERSION = '2026-11';
 
@@ -26,10 +28,17 @@ export function verifyPassword(pw: string, stored: string | null): boolean {
 }
 
 /* ---------------- sessions ---------------- */
-function createSession(reply: FastifyReply, userId: string) {
+/** Coarse device label for the session list (never the raw user-agent string or IP). */
+function deviceLabel(ua: string | undefined): string {
+  if (!ua) return 'Unknown device';
+  const os = /Android/i.test(ua) ? 'Android' : /iPhone|iPad|iOS/i.test(ua) ? 'iOS' : /Windows/i.test(ua) ? 'Windows' : /Mac OS/i.test(ua) ? 'macOS' : /Linux/i.test(ua) ? 'Linux' : 'Other';
+  const br = /Edg\//.test(ua) ? 'Edge' : /Chrome\//.test(ua) ? 'Chrome' : /Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'Browser';
+  return `${br} on ${os}`;
+}
+function createSession(reply: FastifyReply, userId: string, req?: FastifyRequest) {
   const token = randomToken(32);
   const expires = new Date(Date.now() + config.sessionDays * 86400_000);
-  db().run('INSERT INTO auth_sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)', sha256(token), userId, expires.toISOString());
+  db().run('INSERT INTO auth_sessions (token_hash, user_id, expires_at, user_agent, last_used_at) VALUES (?, ?, ?, ?, ?)', sha256(token), userId, expires.toISOString(), deviceLabel(req?.headers['user-agent']), nowIso());
   reply.setCookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: config.production, path: '/', expires });
 }
 function destroySession(req: FastifyRequest, reply: FastifyReply) {
@@ -38,11 +47,23 @@ function destroySession(req: FastifyRequest, reply: FastifyReply) {
   reply.clearCookie(SESSION_COOKIE, { path: '/' });
 }
 
-/* ---------------- dev outbox (local email stand-in) ---------------- */
-export function sendMail(to: string, subject: string, body: string) {
-  // No real email provider is configured. Messages are stored locally and shown at /dev/outbox (dev mode only).
-  db().run('INSERT INTO dev_outbox (to_email, subject, body) VALUES (?, ?, ?)', to, subject, body);
+/* ---------------- login throttling (per account identifier, persisted) ---------------- */
+const LOGIN_WINDOW_MS = 15 * 60_000, LOGIN_MAX_FAILURES = 5, LOCK_MS = 15 * 60_000;
+function loginLocked(key: string): number | null {
+  const r = db().get<{ locked_until: number | null }>('SELECT locked_until FROM auth_throttle WHERE key = ?', key);
+  return r?.locked_until && r.locked_until > Date.now() ? r.locked_until : null;
 }
+function loginFailed(key: string): boolean {
+  const now = Date.now();
+  const r = db().get<{ failures: number; window_start: number }>('SELECT failures, window_start FROM auth_throttle WHERE key = ?', key);
+  const fresh = !r || now - r.window_start > LOGIN_WINDOW_MS;
+  const failures = fresh ? 1 : r!.failures + 1;
+  const lock = failures >= LOGIN_MAX_FAILURES ? now + LOCK_MS : null;
+  db().run('INSERT INTO auth_throttle (key, failures, window_start, locked_until) VALUES (?, ?, ?, ?) ON CONFLICT(key) DO UPDATE SET failures = excluded.failures, window_start = excluded.window_start, locked_until = excluded.locked_until',
+    key, failures, fresh ? now : r!.window_start, lock);
+  return !!lock;
+}
+const loginCleared = (key: string) => db().run('DELETE FROM auth_throttle WHERE key = ?', key);
 function issueToken(userId: string, purpose: string, hours: number): string {
   const t = randomToken(24);
   db().run('INSERT INTO auth_tokens (token_hash, user_id, purpose, expires_at) VALUES (?, ?, ?, ?)', sha256(t), userId, purpose, new Date(Date.now() + hours * 3600_000).toISOString());
@@ -90,7 +111,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.get('/api/auth/me', async (req) => {
     const u = currentUser(req);
     if (u) db().run('UPDATE users SET last_seen_at = ? WHERE id = ?', nowIso(), u.id);
-    return { user: u ? publicMe(u) : null, providers: { google: !!config.googleClientId, apple: !!config.appleClientId, devMode: config.devMode } };
+    return { user: u ? publicMe(u) : null, providers: { google: !!config.googleClientId, apple: !!config.appleClientId, devMode: config.devMode, email: emailStatus().configured } };
   });
 
   /** Guest play: no personal data. Treated with child-safe defaults until upgraded. */
@@ -136,15 +157,21 @@ export async function authRoutes(app: FastifyInstance) {
     } else {
       id = newId('u_');
       db().run('INSERT INTO users (id, email, username, display_name, password_hash, dob, age_band, parent_email, avatar) VALUES (?,?,?,?,?,?,?,?,?)', id, email, username, display, hashPassword(password), dob, band, parentEmail, `orb-${1 + Math.floor(Math.random() * 12)}`);
-      createSession(reply, id);
+      createSession(reply, id, req);
     }
     db().run("INSERT INTO consents (user_id, kind, version) VALUES (?, 'terms', ?), (?, 'privacy', ?)", id, TERMS_VERSION, id, TERMS_VERSION);
     const vt = issueToken(id, 'verify_email', 48);
-    sendMail(email, 'Verify your PLAYZO email', `Welcome to PLAYZO! Verify your email: ${config.publicUrl}/verify?token=${vt}`);
+    sendEmail(email, 'verify_email', { url: `${config.publicUrl}/verify?token=${vt}` }, id);
     if (parentEmail) {
       const pt = issueToken(id, 'parent_consent', 24 * 7);
-      sendMail(parentEmail, 'Your child wants to play on PLAYZO', `A child account "${username}" was created with this address as parent/guardian. Approve multiplayer & friends: ${config.publicUrl}/parent-consent?token=${pt}. Without approval the account can only play solo family games.`);
+      sendEmail(parentEmail, 'parent_consent', { username, url: `${config.publicUrl}/parent-consent?token=${pt}` }, id);
     }
+    // Referral tracking (attribution only; referrals never pay out currency).
+    if (typeof b.ref === 'string' && /^[A-Za-z0-9_]{3,20}$/.test(b.ref)) {
+      const ref = db().get<{ id: string }>('SELECT id FROM users WHERE username = ? AND is_guest = 0 AND id != ?', b.ref, id);
+      if (ref) db().run('UPDATE users SET referred_by = ? WHERE id = ? AND referred_by IS NULL', ref.id, id);
+    }
+    notify(id, 'system', 'Welcome to PLAYZO!', emailStatus().configured ? 'Check your inbox to verify your email.' : 'Email delivery is not configured on this server yet, so verification links are kept in the local outbox.', '/settings');
     audit(id, guest?.is_guest ? 'auth.upgrade_guest' : 'auth.register', id, { band });
     track('auth_register', id, { band, upgraded: !!guest?.is_guest });
     return { user: publicMe(db().get<User>('SELECT * FROM users WHERE id = ?', id)!) };
@@ -155,11 +182,25 @@ export async function authRoutes(app: FastifyInstance) {
     const b = (req.body ?? {}) as Record<string, unknown>;
     const ident = str(b.identifier, 'Email or username', 3, 160);
     const password = str(b.password, 'Password', 1, 128);
+    const key = `login:${ident.toLowerCase()}`;
+    const locked = loginLocked(key);
+    if (locked) throw new HttpError(429, 'Too many failed sign-in attempts. Try again in a few minutes or reset your password.', 'ACCOUNT_LOCKED', { retryAfterSec: Math.ceil((locked - Date.now()) / 1000) });
     const u = db().get<User>("SELECT * FROM users WHERE (email = ? OR username = ?) AND status = 'active' AND is_guest = 0", ident.toLowerCase(), ident);
-    if (!u || !verifyPassword(password, u.password_hash as string)) throw new HttpError(401, 'Incorrect email/username or password', 'BAD_CREDENTIALS');
+    if (!u || !verifyPassword(password, u.password_hash as string)) {
+      const nowLocked = loginFailed(key);
+      if (nowLocked && u) {
+        audit(u.id, 'auth.login_locked', u.id);
+        notify(u.id, 'security', 'Sign-in temporarily locked', 'There were several failed attempts to sign in to your account. If this was not you, consider changing your password.', '/settings');
+      }
+      throw new HttpError(401, 'Incorrect email/username or password', 'BAD_CREDENTIALS');
+    }
+    loginCleared(key);
     const prior = currentUser(req);
     if (prior) destroySession(req, reply);
-    createSession(reply, u.id);
+    createSession(reply, u.id, req);
+    const device = deviceLabel(req.headers['user-agent']);
+    notify(u.id, 'security', 'New sign-in', `Signed in on ${device}.`, '/settings');
+    if (u.email && prefsFor(u.id).emailSecurity) sendEmail(u.email, 'new_sign_in', { when: new Date().toUTCString(), device, url: `${config.publicUrl}/settings` }, u.id);
     track('auth_login', u.id);
     return { user: publicMe(u) };
   });
@@ -191,7 +232,7 @@ export async function authRoutes(app: FastifyInstance) {
     const u = db().get<User>("SELECT * FROM users WHERE email = ? AND status = 'active'", email);
     if (u) {
       const t = issueToken(u.id, 'reset_password', 1);
-      sendMail(email, 'Reset your PLAYZO password', `Reset your password (valid 1 hour): ${config.publicUrl}/reset?token=${t}`);
+      sendEmail(email, 'reset_password', { url: `${config.publicUrl}/reset?token=${t}` }, u.id);
     }
     return { ok: true }; // same response either way (no account enumeration)
   });
@@ -202,6 +243,9 @@ export async function authRoutes(app: FastifyInstance) {
     const uid = consumeToken(str(b.token, 'Token', 10, 100), 'reset_password');
     db().run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(str(b.password, 'Password', 8, 128)), uid);
     db().run('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL', nowIso(), uid);
+    const ru = db().get<{ email: string | null; username: string }>('SELECT email, username FROM users WHERE id = ?', uid);
+    if (ru) { loginCleared(`login:${ru.username.toLowerCase()}`); if (ru.email) loginCleared(`login:${ru.email}`); }
+    notify(uid, 'security', 'Password reset', 'Your password was reset and all devices were signed out.', '/settings');
     audit(uid, 'auth.password_reset', uid);
     return { ok: true };
   });
@@ -211,8 +255,13 @@ export async function authRoutes(app: FastifyInstance) {
     const b = (req.body ?? {}) as Record<string, unknown>;
     if (!verifyPassword(str(b.current, 'Current password', 1, 128), u.password_hash as string)) throw new HttpError(401, 'Current password is incorrect', 'BAD_CREDENTIALS');
     db().run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(str(b.password, 'New password', 8, 128)), u.id);
+    // Sign out every other device; keep this one.
+    const mine = req.cookies?.[SESSION_COOKIE];
+    const revoked = db().run('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL AND token_hash != ?', nowIso(), u.id, mine ? sha256(mine) : '');
+    notify(u.id, 'security', 'Password changed', 'Your password was changed and other devices were signed out.', '/settings');
+    if (u.email && prefsFor(u.id).emailSecurity) sendEmail(u.email as string, 'password_changed', { url: `${config.publicUrl}/forgot` }, u.id);
     audit(u.id, 'auth.password_change', u.id);
-    return { ok: true };
+    return { ok: true, otherSessionsRevoked: Number(revoked.changes) };
   });
 
   /** Account deletion: permanently removes personal data and gameplay history. */
@@ -228,6 +277,7 @@ export async function authRoutes(app: FastifyInstance) {
       db().run('UPDATE analytics_events SET user_id = NULL WHERE user_id = ?', u.id);
     });
     audit(null, 'auth.account_deleted', hashed);
+    if (u.email) sendEmail(u.email as string, 'account_deleted', {}, null);
     reply.clearCookie(SESSION_COOKIE, { path: '/' });
     return { ok: true };
   });
@@ -238,8 +288,15 @@ export async function authRoutes(app: FastifyInstance) {
     const method = str((req.body as any)?.method, 'Method', 2, 40);
     const provider = AGE_ASSURANCE_PROVIDERS[method];
     if (!provider) throw new HttpError(400, 'Unknown verification method', 'VALIDATION');
-    if (!provider.production && !config.devMode) throw new HttpError(503, 'No production age-assurance provider is configured', 'NOT_CONFIGURED');
     if (u.is_guest || !u.dob || bandFor(ageOn(u.dob)) !== 'adult') throw new HttpError(403, 'Age assurance is only available to adult accounts', 'NOT_ADULT');
+    // Certified providers must complete their own redirect/callback flow (see ageAssurance adapter); a bare POST never verifies anyone.
+    if (provider.production) throw new HttpError(501, 'This provider must be completed through its verification flow', 'NOT_CONFIGURED');
+    if (!provider.production && (!config.devMode || config.production)) throw new HttpError(503, 'No production age-assurance provider is configured', 'NOT_CONFIGURED');
+    // The dev attestation is not a real verification: only internal QA accounts on a dev server may use it.
+    if (!provider.production && !isQaPreview(u)) {
+      audit(u.id, 'access.age_assurance_refused', u.id, { method, reason: 'not_qa_account' });
+      throw new HttpError(503, 'Age verification is not available yet: no certified provider is configured', 'NOT_CONFIGURED');
+    }
     db().run('UPDATE users SET adult_verified_at = ?, adult_verify_method = ? WHERE id = ?', nowIso(), method, u.id);
     audit(u.id, 'access.age_assurance', u.id, { method, production: provider.production });
     return { ok: true, method, production: provider.production, label: provider.label };
@@ -282,9 +339,43 @@ export async function authRoutes(app: FastifyInstance) {
     throw new HttpError(501, 'OAuth redirect flow requires deployment configuration (see DEPLOYMENT_GUIDE.md)', 'NOT_CONFIGURED');
   });
 
-  /** Dev-only email outbox viewer. */
+  /** Active sign-in sessions (device label only) and revocation. */
+  app.get('/api/auth/sessions', async (req) => {
+    const u = requireUser(req);
+    const mine = req.cookies?.[SESSION_COOKIE];
+    const myHash = mine ? sha256(mine) : '';
+    return {
+      sessions: db().all<{ token_hash: string; user_agent: string | null; created_at: string; last_used_at: string | null; expires_at: string }>(
+        'SELECT token_hash, user_agent, created_at, last_used_at, expires_at FROM auth_sessions WHERE user_id = ? AND revoked_at IS NULL AND expires_at > ? ORDER BY created_at DESC LIMIT 20', u.id, nowIso(),
+      ).map((x) => ({ id: x.token_hash.slice(0, 16), device: x.user_agent ?? 'Unknown device', createdAt: x.created_at, lastUsedAt: x.last_used_at, current: x.token_hash === myHash })),
+    };
+  });
+  app.post('/api/auth/sessions/revoke', async (req) => {
+    const u = requireUser(req);
+    const b = (req.body ?? {}) as Record<string, unknown>;
+    const mine = req.cookies?.[SESSION_COOKIE];
+    const myHash = mine ? sha256(mine) : '';
+    let n = 0;
+    if (b.all === true) n = Number(db().run('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL AND token_hash != ?', nowIso(), u.id, myHash).changes);
+    else {
+      const id = str(b.id, 'Session', 16, 16);
+      if (myHash.startsWith(id)) throw new HttpError(400, 'Use Sign out to end this session', 'VALIDATION');
+      n = Number(db().run('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL AND substr(token_hash, 1, 16) = ?', nowIso(), u.id, id).changes);
+    }
+    audit(u.id, 'auth.sessions_revoked', u.id, { count: n });
+    return { ok: true, revoked: n };
+  });
+  app.post('/api/auth/resend-verification', async (req) => {
+    const u = requireUser(req);
+    rateLimit(req, 'resend-verify', 3);
+    if (!u.email || u.email_verified_at) throw new HttpError(400, 'Nothing to verify', 'VALIDATION');
+    sendEmail(u.email as string, 'verify_email', { url: `${config.publicUrl}/verify?token=${issueToken(u.id, 'verify_email', 48)}` }, u.id);
+    return { ok: true, delivery: emailStatus() };
+  });
+
+  /** Dev-only email outbox viewer (the local delivery log). */
   app.get('/api/dev/outbox', async () => {
     if (!config.devMode) throw new HttpError(404, 'Not found', 'NOT_FOUND');
-    return { messages: db().all('SELECT id, to_email, subject, body, created_at FROM dev_outbox ORDER BY id DESC LIMIT 50') };
+    return { delivery: emailStatus(), messages: db().all('SELECT id, to_email, subject, body, template, provider, status, attempts, last_error, created_at, sent_at FROM dev_outbox ORDER BY id DESC LIMIT 50') };
   });
 }

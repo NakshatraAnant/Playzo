@@ -5,9 +5,12 @@
  *    verified sessions (see sessions.ts submit()).
  * Safety: emotes only (no free text), rooms never mix adult and under-18/unknown-age accounts,
  * under-13 accounts need parental consent, blocked players cannot share a room.
+ * Persistence: every room is snapshotted to the `rooms` table (engine state + RNG cursor), so live
+ * rooms survive a server restart; players reconnect with the same code and carry on.
  */
 import type { FastifyInstance } from 'fastify';
 import type { WebSocket } from 'ws';
+import { randomBytes } from 'node:crypto';
 import { ENGINES } from './games/registry';
 import { BY_ID } from '../shared/catalogue';
 import { Difficulty, DIFFICULTIES, GameError } from '../shared/engine';
@@ -30,11 +33,61 @@ interface Room {
   members: Member[]; maxPlayers: number; adult: boolean; isPublic: boolean; createdAt: number;
   state: any; rng: SeededRng | null; seed: string | null; startedAt: number | null; deadline: number | null;
   race: Record<string, { score: number; sessionId: string } | null>; result: any; matchId: string | null; lastActivity: number;
+  dirty?: boolean; lastSaved?: number;
 }
 const rooms = new Map<string, Room>();
 const queue = new Map<string, { userId: string; at: number }[]>();
+const LOBBY_DISCONNECT_MS = 60_000;
 
-const code6 = () => { let c: string; do { c = Math.random().toString(36).slice(2, 8).toUpperCase(); } while (rooms.has(c) || c.length < 6); return c; };
+const code6 = () => {
+  let c: string;
+  do { c = randomBytes(6).toString('base64').replace(/[^A-Za-z0-9]/g, '').slice(0, 6).toUpperCase(); }
+  while (c.length < 6 || rooms.has(c) || db().get("SELECT 1 FROM rooms WHERE code = ? AND status IN ('lobby','playing')", c));
+  return c;
+};
+
+/* ---------------- persistence ---------------- */
+function snapshot(r: Room) {
+  return {
+    code: r.code, gameId: r.gameId, hostId: r.hostId, format: r.format, difficulty: r.difficulty, teams: r.teams, status: r.status,
+    members: r.members.map((m) => ({ userId: m.userId, name: m.name, avatar: m.avatar, adult: m.adult, ready: m.ready, team: m.team, connected: m.connected, leftAt: m.leftAt })),
+    maxPlayers: r.maxPlayers, adult: r.adult, isPublic: r.isPublic, createdAt: r.createdAt, state: r.state, seed: r.seed, rngCursor: r.rng?.cursor() ?? 0,
+    startedAt: r.startedAt, deadline: r.deadline, race: r.race, result: r.result, matchId: r.matchId, lastActivity: r.lastActivity,
+  };
+}
+/** Write the room to the database now (structural changes) - cheap with SQLite WAL. */
+function saveRoom(r: Room, status: string = r.status) {
+  try {
+    db().run(
+      `INSERT INTO rooms (code, game_id, host_id, status, adult, snapshot, version, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+       ON CONFLICT(code) DO UPDATE SET host_id = excluded.host_id, status = excluded.status, snapshot = excluded.snapshot, version = rooms.version + 1, updated_at = excluded.updated_at`,
+      r.code, r.gameId, r.hostId, status, r.adult ? 1 : 0, JSON.stringify(snapshot(r)), new Date().toISOString(),
+    );
+    r.dirty = false; r.lastSaved = Date.now();
+  } catch (e) { console.error('[rooms] save failed', r.code, e); }
+}
+/** Restore lobby/playing rooms after a restart. Members start disconnected and must reconnect. */
+export function restoreRooms(): number {
+  let n = 0;
+  const now = Date.now();
+  for (const row of db().all<{ code: string; snapshot: string }>("SELECT code, snapshot FROM rooms WHERE status IN ('lobby','playing')")) {
+    try {
+      const s = JSON.parse(row.snapshot);
+      if (!ENGINES[s.gameId] || now - s.createdAt > 3 * 3600_000) { db().run("UPDATE rooms SET status = 'expired' WHERE code = ?", row.code); continue; }
+      const r: Room = {
+        ...s, members: s.members.map((m: any) => ({ ...m, connected: false, leftAt: now, sockets: new Set<WebSocket>() })),
+        rng: s.status === 'playing' && s.format === 'versus' && s.seed ? new SeededRng(`${s.seed}::room`, s.rngCursor ?? 0) : null,
+        lastActivity: now,
+      };
+      rooms.set(r.code, r);
+      n++;
+    } catch (e) { console.error('[rooms] restore failed', row.code, e); }
+  }
+  // Housekeeping: old finished/expired rows are purged after 7 days (match results live in `matches`).
+  db().run("DELETE FROM rooms WHERE status IN ('done','expired') AND updated_at < ?", new Date(now - 7 * 86400_000).toISOString());
+  if (n) console.log(`[rooms] restored ${n} live room(s) from the database`);
+  return n;
+}
 const isAdult = (u: User) => u.age_band === 'adult';
 
 function formatFor(gameId: string): 'versus' | 'race' | null {
@@ -76,6 +129,7 @@ export function createRoom(u: User, gameId: string, difficulty: string, teams: b
     adult: isAdult(u), isPublic, createdAt: Date.now(), state: null, rng: null, seed: null, startedAt: null, deadline: null, race: {}, result: null, matchId: null, lastActivity: Date.now(),
   };
   rooms.set(r.code, r);
+  saveRoom(r);
   track('room_created', u.id, { game: gameId, format });
   return r;
 }
@@ -90,6 +144,7 @@ function join(r: Room, u: User, ws: WebSocket) {
   if (r.members.some((m) => isBlocked(m.userId, u.id))) throw new HttpError(403, 'You cannot join this room', 'FORBIDDEN');
   const team = r.teams ? (r.members.filter((m) => m.team === 0).length <= r.members.filter((m) => m.team === 1).length ? 0 : 1) : 0;
   r.members.push({ userId: u.id, name: u.display_name, avatar: u.avatar, adult: isAdult(u), ready: false, team, connected: true, leftAt: null, sockets: new Set([ws]) });
+  saveRoom(r);
 }
 
 function start(r: Room) {
@@ -110,6 +165,7 @@ function start(r: Room) {
     r.race = Object.fromEntries(r.members.map((m) => [m.userId, null]));
     r.deadline = Date.now() + Math.min(e.maxDurationMs?.(null as any) ?? 600_000, 20 * 60_000) + 60_000;
   }
+  saveRoom(r);
   track('room_started', r.hostId, { game: r.gameId, players: n });
   broadcastRoom(r);
   broadcastState(r);
@@ -131,10 +187,12 @@ function finish(r: Room, forced?: { winner: string | null; reason: string }) {
   }
   if (forced) { winner = forced.winner; summary.reason = forced.reason; }
   const outcome = (uid: string, team: number) => (r.teams ? (teamWinner === null ? 'draw' : teamWinner === team ? 'win' : 'loss') : winner === null ? 'draw' : winner === uid ? 'win' : 'loss');
-  r.matchId = newId('m_');
+  // Deterministic match id: a room start can only ever produce one match record (no duplicate results/rewards).
+  r.matchId = `m_${r.code}_${r.startedAt ?? 0}`;
   r.result = { scores, winner, teamWinner, summary, outcomes: Object.fromEntries(r.members.map((m) => [m.userId, outcome(m.userId, m.team)])) };
   db().tx(() => {
-    db().run('INSERT INTO matches (id, room_code, game_id, format, players, result) VALUES (?, ?, ?, ?, ?, ?)', r.matchId, r.code, r.gameId, r.teams ? 'teams' : r.format, JSON.stringify(r.members.map((m) => m.userId)), JSON.stringify(r.result));
+    const ins = db().run('INSERT OR IGNORE INTO matches (id, room_code, game_id, format, players, result) VALUES (?, ?, ?, ?, ?, ?)', r.matchId, r.code, r.gameId, r.teams ? 'teams' : r.format, JSON.stringify(r.members.map((m) => m.userId)), JSON.stringify(r.result));
+    if (Number(ins.changes) === 0) return; // already recorded
     for (const m of r.members) {
       const user = db().get<{ id: string }>('SELECT id FROM users WHERE id = ?', m.userId);
       if (!user) continue;
@@ -143,6 +201,7 @@ function finish(r: Room, forced?: { winner: string | null; reason: string }) {
       if (r.format === 'versus') recordCompletion({ userId: m.userId, gameId: r.gameId, sessionId: `${r.matchId}:${m.userId}`, score: Math.round(scores[m.userId] ?? 0), won: outcome(m.userId, m.team) === 'win', vsAi: false, difficulty: r.difficulty, context: 'room', multiplayer: true });
     }
   });
+  saveRoom(r);
   track('room_finished', r.hostId, { game: meta.id, format: r.format });
   broadcastRoom(r);
   broadcastState(r);
@@ -160,6 +219,7 @@ function applyAction(r: Room, uid: string, action: unknown) {
     throw err;
   }
   r.lastActivity = Date.now();
+  saveRoom(r);
   broadcastState(r);
   if (e.isOver(r.state)) finish(r);
 }
@@ -174,6 +234,7 @@ hooks.raceFinished = (code, userId, score, sessionId) => {
   const r = rooms.get(code);
   if (!r || r.status !== 'playing' || !(userId in r.race)) return;
   r.race[userId] = { score, sessionId };
+  saveRoom(r);
   broadcastRoom(r);
   if (r.members.every((m) => r.race[m.userId] || !m.connected)) finish(r);
 };
@@ -187,6 +248,7 @@ setInterval(() => {
         const e = ENGINES[r.gameId];
         if (e.timed) {
           r.state = e.apply(r.state, { type: 'tick' }, { rng: r.rng!, now, player: r.hostId });
+          r.dirty = true;
           broadcastState(r);
           if (e.isOver(r.state)) finish(r);
         }
@@ -198,8 +260,22 @@ setInterval(() => {
         }
       }
       if (r.status === 'playing' && r.format === 'race' && r.deadline && now > r.deadline) finish(r);
+      // Lobby: players who dropped and did not come back within the grace period leave the room.
+      if (r.status === 'lobby') {
+        const before = r.members.length;
+        r.members = r.members.filter((m) => m.connected || !m.leftAt || now - m.leftAt < LOBBY_DISCONNECT_MS);
+        if (r.members.length !== before) {
+          if (r.members.length && !r.members.some((m) => m.userId === r.hostId)) r.hostId = r.members[0].userId;
+          r.dirty = true;
+          broadcastRoom(r);
+        }
+      }
+      if (r.dirty && now - (r.lastSaved ?? 0) > 2000) saveRoom(r);
       const empty = r.members.every((m) => !m.connected);
-      if ((empty && now - r.lastActivity > 5 * 60_000) || now - r.createdAt > 3 * 3600_000) rooms.delete(r.code);
+      if ((empty && now - r.lastActivity > 5 * 60_000) || now - r.createdAt > 3 * 3600_000) {
+        rooms.delete(r.code);
+        saveRoom(r, r.status === 'done' ? 'done' : 'expired');
+      }
     } catch (err) {
       console.error('[rooms] tick error', err);
     }
@@ -210,6 +286,18 @@ setInterval(() => {
 
 /* ---------------- routes ---------------- */
 export async function roomRoutes(app: FastifyInstance) {
+  restoreRooms();
+  app.addHook('onClose', async () => { for (const r of rooms.values()) saveRoom(r); });
+  app.get('/api/me/matches', async (req) => {
+    const u = requireUser(req);
+    return {
+      matches: db().all(
+        `SELECT m.id, m.game_id, m.format, m.room_code, m.created_at, mp.score, mp.outcome, mp.team,
+                (SELECT COUNT(*) FROM match_players x WHERE x.match_id = m.id) AS players
+         FROM match_players mp JOIN matches m ON m.id = mp.match_id WHERE mp.user_id = ? ORDER BY m.created_at DESC LIMIT 30`, u.id,
+      ),
+    };
+  });
   app.post('/api/rooms', async (req) => {
     const u = requireUser(req);
     rateLimit(req, 'room-create', 20);
@@ -249,8 +337,8 @@ export async function roomRoutes(app: FastifyInstance) {
             broadcastState(r);
             break;
           }
-          case 'ready': if (room) { const me = room.members.find((x) => x.userId === u.id); if (me && room.status === 'lobby') { me.ready = !!m.v; broadcastRoom(room); } } break;
-          case 'team': if (room && room.teams && room.status === 'lobby') { const me = room.members.find((x) => x.userId === u.id); if (me) { me.team = m.team === 1 ? 1 : 0; broadcastRoom(room); } } break;
+          case 'ready': if (room) { const me = room.members.find((x) => x.userId === u.id); if (me && room.status === 'lobby') { me.ready = !!m.v; saveRoom(room); broadcastRoom(room); } } break;
+          case 'team': if (room && room.teams && room.status === 'lobby') { const me = room.members.find((x) => x.userId === u.id); if (me) { me.team = m.team === 1 ? 1 : 0; saveRoom(room); broadcastRoom(room); } } break;
           case 'start':
             if (!room) throw new HttpError(400, 'Join a room first', 'VALIDATION');
             if (room.hostId !== u.id) throw new HttpError(403, 'Only the host can start', 'FORBIDDEN');
@@ -269,6 +357,7 @@ export async function roomRoutes(app: FastifyInstance) {
             Object.assign(room, { status: 'lobby', state: null, rng: null, seed: null, startedAt: null, deadline: null, race: {}, result: null, matchId: null });
             room.members = room.members.filter((x) => x.connected);
             room.members.forEach((x) => { x.ready = false; });
+            saveRoom(room);
             broadcastRoom(room);
             break;
           }
@@ -289,26 +378,28 @@ export async function roomRoutes(app: FastifyInstance) {
             break;
           }
           case 'unqueue': for (const [k, list] of queue) queue.set(k, list.filter((q) => q.userId !== u.id)); break;
-          case 'leave': leave(); break;
+          case 'leave': leave(true); break;
           case 'ping': send(socket, { t: 'pong', serverNow: Date.now() }); break;
         }
       } catch (e) { fail(e); }
     });
-    const leave = () => {
+    /** explicit = the player pressed Leave; otherwise the connection dropped and they may reconnect. */
+    const leave = (explicit = false) => {
       if (!room) return;
       const me = room.members.find((x) => x.userId === u.id);
       if (me) {
         me.sockets.delete(socket);
         if (!me.sockets.size) {
-          if (room.status === 'lobby') room.members = room.members.filter((x) => x !== me);
+          if (room.status === 'lobby' && explicit) room.members = room.members.filter((x) => x !== me);
           else { me.connected = false; me.leftAt = Date.now(); }
-          if (room.hostId === u.id && room.members.length && room.status === 'lobby') room.hostId = room.members[0].userId;
+          if (room.hostId === u.id && room.members.length && room.status === 'lobby' && explicit) room.hostId = room.members[0].userId;
         }
       }
+      saveRoom(room);
       broadcastRoom(room);
       room = null;
     };
-    socket.on('close', () => { clearInterval(rl); leave(); for (const [k, list] of queue) queue.set(k, list.filter((q) => q.userId !== u.id)); allSockets.get(u.id)?.delete(socket); });
+    socket.on('close', () => { clearInterval(rl); leave(false); for (const [k, list] of queue) queue.set(k, list.filter((q) => q.userId !== u.id)); allSockets.get(u.id)?.delete(socket); });
     if (!allSockets.has(u.id)) allSockets.set(u.id, new Set());
     allSockets.get(u.id)!.add(socket);
     send(socket, { t: 'hello', userId: u.id, emotes: EMOTES, serverNow: Date.now() });
@@ -318,3 +409,20 @@ export async function roomRoutes(app: FastifyInstance) {
 const allSockets = new Map<string, Set<WebSocket>>();
 const socketsFor = (uid: string) => [...(allSockets.get(uid) ?? [])];
 export const roomCount = () => rooms.size;
+/** Admin monitoring: live rooms without any personal data beyond display names. */
+export const roomList = () => [...rooms.values()].map((r) => ({
+  code: r.code, gameId: r.gameId, format: r.teams ? 'teams' : r.format, status: r.status, adult: r.adult, players: r.members.length,
+  connected: r.members.filter((m) => m.connected).length, createdAt: new Date(r.createdAt).toISOString(), startedAt: r.startedAt ? new Date(r.startedAt).toISOString() : null,
+}));
+/** Admin moderation: close a room immediately (members are notified). */
+export function closeRoom(code: string, reason: string): boolean {
+  const r = rooms.get(code);
+  if (!r) return false;
+  for (const m of r.members) for (const ws of m.sockets) { send(ws, { t: 'error', message: 'This room was closed by a moderator', code: 'CLOSED' }); ws.close(); }
+  rooms.delete(code);
+  saveRoom(r, 'expired');
+  track('room_closed', null, { game: r.gameId, reason });
+  return true;
+}
+/** Tests: simulate a process restart (drop memory, keep the database). */
+export function _dropMemoryForTests() { rooms.clear(); queue.clear(); }

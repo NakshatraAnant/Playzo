@@ -139,44 +139,101 @@ describe('Lounge access & legal gates', () => {
     expect((await t.get('/api/lounge/status')).status).toBe(404);
     expect((await t.post('/api/auth/age-assurance', { method: 'dev-attestation' })).status).toBe(403);
   });
-  it('adults need age assurance + terms; then legal gate blocks play (451) until approved', async () => {
+  it('ordinary adults cannot see or unlock the Lounge while it is switched off (default)', async () => {
     const a = new Client(); await reg(a, 'adult1', '1988-08-08');
+    expect((await a.get('/api/auth/me')).body.user.lounge.visible).toBe(false);
+    expect((await a.get('/api/lounge/status')).status).toBe(404);
     expect((await a.get('/api/games?env=lounge')).body.games).toHaveLength(0);
-    expect((await a.post('/api/auth/age-assurance', { method: 'dev-attestation' })).status).toBe(200);
-    expect((await a.post('/api/auth/lounge-terms')).status).toBe(200);
-    const list = await a.get('/api/games?env=lounge');
-    expect(list.body.games).toHaveLength(25);
-    expect(list.body.games.every((g: any) => g.gate === 'pending_legal_review')).toBe(true);
-    expect((await a.post('/api/sessions', { gameId: 'blackjack' })).status).toBe(451);
+    // The dev attestation is refused for non-QA accounts: no fake verification success.
+    expect((await a.post('/api/auth/age-assurance', { method: 'dev-attestation' })).status).toBe(503);
+    expect((await a.post('/api/sessions', { gameId: 'blackjack' })).status).toBe(404);
   });
-  it('approved game (legal reference) is playable; chips are free, ledgered and idempotent', async () => {
-    config.legalApprovals['dice-arena'] = 'TEST-REF-1';
+  it('QA preview needs the server flag AND an admin/tester role; legal gate blocks play (451) without it', async () => {
+    const a = new Client(); await reg(a, 'qa1', '1988-08-08');
+    db().run("UPDATE users SET role = 'tester' WHERE username = 'qa1'");
+    // Flag off: even a tester is refused.
+    expect((await a.post('/api/auth/age-assurance', { method: 'dev-attestation' })).status).toBe(503);
+    config.adultDevPreview = true;
+    try {
+      expect((await a.post('/api/auth/age-assurance', { method: 'dev-attestation' })).status).toBe(200);
+      expect((await a.post('/api/auth/lounge-terms')).status).toBe(200);
+      const list = await a.get('/api/games?env=lounge');
+      expect(list.body.games).toHaveLength(25);
+      expect(list.body.games.every((g: any) => g.gate === 'dev-preview')).toBe(true);
+      expect((await a.post('/api/sessions', { gameId: 'blackjack' })).status).toBe(200);
+    } finally { config.adultDevPreview = false; }
+    // Preview flag off again: the tester loses access immediately.
+    expect((await a.get('/api/games?env=lounge')).body.games).toHaveLength(0);
+    expect((await a.post('/api/sessions', { gameId: 'blackjack' })).status).toBe(404);
+    // Lounge switched on, certified verification, but no legal approval: 451, never a playable game.
+    const { AGE_ASSURANCE_PROVIDERS } = await import('../server/access');
+    AGE_ASSURANCE_PROVIDERS['test-certified'] = { strong: true, production: true, label: 'test-only certified provider' };
+    db().run("UPDATE users SET adult_verify_method = 'test-certified' WHERE username = 'qa1'");
+    config.loungeEnabled = true;
+    try {
+      expect((await a.post('/api/sessions', { gameId: 'blackjack' })).status).toBe(451);
+    } finally { config.loungeEnabled = false; delete AGE_ASSURANCE_PROVIDERS['test-certified']; }
+  });
+  it('approved game needs master switch + config reference + matching approved legal record', async () => {
+    const { AGE_ASSURANCE_PROVIDERS } = await import('../server/access');
+    AGE_ASSURANCE_PROVIDERS['test-certified'] = { strong: true, production: true, label: 'test-only certified provider' };
     const a = new Client(); await reg(a, 'adult2', '1985-05-05');
-    await a.post('/api/auth/age-assurance', { method: 'dev-attestation' });
+    db().run("UPDATE users SET adult_verified_at = ?, adult_verify_method = 'test-certified' WHERE username = 'adult2'", new Date().toISOString());
     await a.post('/api/auth/lounge-terms');
-    const s = await a.post('/api/sessions', { gameId: 'dice-arena' });
-    expect(s.status).toBe(200);
-    expect(s.body.chips).toBe(10000);
-    expect(s.body.seed).toBeUndefined();
-    const r = await a.post(`/api/sessions/${s.body.sessionId}/action`, { action: { type: 'roll', bet: { kind: 'over', amount: 100 } } });
-    expect(r.status).toBe(200);
-    const won = r.body.view.last.won;
-    expect(r.body.chips).toBe(10000 - 100 + won);
-    expect((await a.post(`/api/sessions/${s.body.sessionId}/action`, { action: { type: 'roll', bet: { kind: 'over', amount: 99999999 } } })).status).toBe(422);
-    const end = await a.post(`/api/sessions/${s.body.sessionId}/end`);
-    expect(end.body.seed).toHaveLength(64); // seed revealed for audit after the session
-    const { createHash } = await import('node:crypto');
-    expect(createHash('sha256').update(end.body.seed).digest('hex')).toBe(s.body.commit);
-    delete config.legalApprovals['dice-arena'];
+    config.loungeEnabled = true;
+    config.legalApprovals['dice-arena'] = 'TEST-REF-1';
+    try {
+      // Config reference alone is not enough: no matching approved legal record yet.
+      expect((await a.post('/api/sessions', { gameId: 'dice-arena' })).status).toBe(451);
+      db().run("INSERT INTO legal_reviews (game_id, status, reference, reviewer) VALUES ('dice-arena', 'approved', 'WRONG-REF', 'test')");
+      expect((await a.post('/api/sessions', { gameId: 'dice-arena' })).status).toBe(451);
+      db().run("INSERT INTO legal_reviews (game_id, status, reference, reviewer) VALUES ('dice-arena', 'approved', 'TEST-REF-1', 'test')");
+      const s = await a.post('/api/sessions', { gameId: 'dice-arena' });
+      expect(s.status).toBe(200);
+      expect(s.body.chips).toBe(10000);
+      expect(s.body.seed).toBeUndefined();
+      const r = await a.post(`/api/sessions/${s.body.sessionId}/action`, { action: { type: 'roll', bet: { kind: 'over', amount: 100 } } });
+      expect(r.status).toBe(200);
+      const won = r.body.view.last.won;
+      expect(r.body.chips).toBe(10000 - 100 + won);
+      expect((await a.post(`/api/sessions/${s.body.sessionId}/action`, { action: { type: 'roll', bet: { kind: 'over', amount: 99999999 } } })).status).toBe(422);
+      const end = await a.post(`/api/sessions/${s.body.sessionId}/end`);
+      expect(end.body.seed).toHaveLength(64); // seed revealed for audit after the session
+      const { createHash } = await import('node:crypto');
+      expect(createHash('sha256').update(end.body.seed).digest('hex')).toBe(s.body.commit);
+      // Master switch off again: the approved game disappears for the public.
+      config.loungeEnabled = false;
+      expect((await a.post('/api/sessions', { gameId: 'dice-arena' })).status).toBe(404);
+    } finally {
+      config.loungeEnabled = false;
+      delete config.legalApprovals['dice-arena'];
+      delete AGE_ASSURANCE_PROVIDERS['test-certified'];
+    }
+  });
+  it('expired age verification removes entitlement', async () => {
+    const a = new Client(); await reg(a, 'adultold', '1982-02-02');
+    db().run("UPDATE users SET role = 'tester', adult_verified_at = '2020-01-01T00:00:00.000Z', adult_verify_method = 'dev-attestation' WHERE username = 'adultold'");
+    config.adultDevPreview = true;
+    try {
+      await a.post('/api/auth/lounge-terms');
+      const me = await a.get('/api/auth/me');
+      expect(me.body.user.lounge.entitled).toBe(false);
+      expect(me.body.user.lounge.reasons).toContain('age_verification_expired');
+    } finally { config.adultDevPreview = false; }
   });
   it('cool-off blocks lounge entitlement', async () => {
     const a = new Client(); await reg(a, 'adult3', '1980-03-03');
-    await a.post('/api/auth/age-assurance', { method: 'dev-attestation' });
-    await a.post('/api/auth/lounge-terms');
-    const r = await a.req('PATCH', '/api/auth/profile', { loungeCooloffDays: 1 });
-    expect(r.status).toBe(200);
-    expect(r.body.user.lounge.entitled).toBe(false);
-    expect(r.body.user.lounge.reasons).toContain('cool_off_active');
+    db().run("UPDATE users SET role = 'tester' WHERE username = 'adult3'");
+    config.adultDevPreview = true;
+    try {
+      expect((await a.post('/api/auth/age-assurance', { method: 'dev-attestation' })).status).toBe(200);
+      await a.post('/api/auth/lounge-terms');
+      expect((await a.get('/api/auth/me')).body.user.lounge.entitled).toBe(true);
+      const r = await a.req('PATCH', '/api/auth/profile', { loungeCooloffDays: 1 });
+      expect(r.status).toBe(200);
+      expect(r.body.user.lounge.entitled).toBe(false);
+      expect(r.body.user.lounge.reasons).toContain('cool_off_active');
+    } finally { config.adultDevPreview = false; }
   });
 });
 

@@ -1,11 +1,12 @@
 import { Engine, GameError } from '../../../shared/engine';
 import { TRIVIA } from '../../data/trivia';
-import { RoundsState, initRounds, advance, answer, fifty, roundsView, roundsResult, RoundQ } from './rounds';
+import { RoundsState, initRounds, advance, answer, fifty, roundsView, roundsResult, RoundQ, shiftRounds } from './rounds';
 
 type A = { type: 'answer'; choice: number } | { type: 'fifty' } | { type: 'tick' };
 
 export const triviaClash: Engine<RoundsState, A> = {
   id: 'trivia-clash', rulesVersion: '1.0.0', mode: 'server', players: { min: 1, max: 8 }, simultaneous: true, timed: true,
+  shiftTime: (s, dt) => shiftRounds(s, dt),
   init(o, ctx) {
     const level = o.difficulty === 'easy' ? [1, 2] : o.difficulty === 'normal' ? [1, 2, 3] : [2, 3];
     const pool = TRIVIA.filter((q) => level.includes(q.d));

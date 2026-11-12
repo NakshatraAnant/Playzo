@@ -38,7 +38,20 @@ export const config = {
   /** Dev mode features are always refused in production. */
   devMode: !production && bool(env.PLAYZO_DEV_MODE ?? 'true'),
   legalApprovals: parseApprovals(env.PLAYZO_LEGAL_APPROVALS),
+  /**
+   * Master switch for the public Lounge. OFF by default. Even when ON, each game also needs a
+   * PLAYZO_LEGAL_APPROVALS entry whose reference matches an 'approved' legal_reviews record.
+   */
+  loungeEnabled: bool(env.PLAYZO_LOUNGE_ENABLED),
+  /** Internal QA preview: localhost only, never in production, and only for admin/tester accounts. */
   adultDevPreview: !production && bool(env.PLAYZO_ADULT_DEV_PREVIEW),
+  /** Adult age verification must be renewed after this many days. */
+  ageVerificationDays: Number(env.PLAYZO_AGE_VERIFICATION_DAYS ?? 365),
+  email: {
+    provider: (env.PLAYZO_EMAIL_PROVIDER || 'outbox') as 'outbox' | 'resend',
+    from: env.PLAYZO_EMAIL_FROM || '',
+    resendApiKey: env.RESEND_API_KEY || '',
+  },
   googleClientId: env.GOOGLE_CLIENT_ID || '',
   appleClientId: env.APPLE_CLIENT_ID || '',
   adminEmail: env.PLAYZO_ADMIN_EMAIL || '',

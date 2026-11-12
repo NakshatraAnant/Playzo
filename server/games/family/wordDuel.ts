@@ -14,6 +14,7 @@ export function wordPoints(w: string, letters: string[]): number {
 
 export const wordDuel: Engine<WDState, A> = {
   id: 'word-duel', rulesVersion: '1.0.0', mode: 'server', players: { min: 1, max: 6 }, simultaneous: true, timed: true,
+  shiftTime: (s, dt) => { s.start += dt; s.endsAt += dt; return s; },
   init(o, ctx) {
     const seedWord = ctx.rng.pick(PANGRAMS);
     const letters = ctx.rng.shuffle([...new Set(seedWord.split(''))]);

@@ -1,6 +1,6 @@
 import { Engine, GameError } from '../../../shared/engine';
 import type { Rng } from '../../../shared/rng';
-import { RoundsState, initRounds, advance, answer, roundsView, roundsResult, RoundQ } from './rounds';
+import { RoundsState, initRounds, advance, answer, roundsView, roundsResult, RoundQ, shiftRounds } from './rounds';
 
 /** Micro-game generators. Each returns a question with 4 options and a visual payload. */
 const EMOJI_SETS = [
@@ -92,6 +92,7 @@ type A = { type: 'answer'; choice: number } | { type: 'tick' };
 
 export const partyChaos: Engine<RoundsState, A> = {
   id: 'party-chaos', rulesVersion: '1.0.0', mode: 'server', players: { min: 1, max: 8 }, simultaneous: true, timed: true,
+  shiftTime: (s, dt) => shiftRounds(s, dt),
   init(o, ctx) {
     const order = ctx.rng.shuffle(GENERATORS.map((_, i) => i));
     const qs = order.slice(0, 8).map((i) => GENERATORS[i](ctx.rng));

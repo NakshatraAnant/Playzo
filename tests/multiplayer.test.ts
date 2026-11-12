@@ -95,3 +95,60 @@ describe('race room: same seed, verified scores', () => {
     A.ws.close(); B.ws.close();
   });
 });
+
+describe('persistence: rooms survive a server restart', () => {
+  it('a live match is restored from the database and players reconnect and finish it', async () => {
+    const { restoreRooms, _dropMemoryForTests } = await import('../server/rooms');
+    const a = await user('rsa'), b = await user('rsb');
+    const { code } = await api(a.cookie, '/api/rooms', { gameId: 'connect-five' });
+    let A = socket(a.cookie), B = socket(b.cookie);
+    await Promise.all([A.open, B.open]);
+    A.send({ t: 'join', code }); await A.wait((m) => m.t === 'room');
+    B.send({ t: 'join', code }); await A.wait((m) => m.t === 'room' && m.room.members.length === 2);
+    B.send({ t: 'ready', v: true }); await A.wait((m) => m.t === 'room' && m.room.members.every((x: any) => x.ready || x.userId === a.id));
+    A.send({ t: 'start' }); await A.wait((m) => m.t === 'state');
+    // Two moves each before the "crash".
+    for (let k = 0; k < 2; k++) {
+      A.send({ t: 'act', action: { type: 'place', i: k } }); await B.wait((m) => m.t === 'state' && m.view.cells[k] === 0);
+      B.send({ t: 'act', action: { type: 'place', i: 65 + k } }); await A.wait((m) => m.t === 'state' && m.view.cells[65 + k] === 1);
+    }
+    expect(db().get<{ status: string }>('SELECT status FROM rooms WHERE code = ?', code)!.status).toBe('playing');
+    // Simulate a process restart: memory is gone, the database remains.
+    A.ws.terminate(); B.ws.terminate();
+    _dropMemoryForTests();
+    expect(restoreRooms()).toBeGreaterThanOrEqual(1);
+    A = socket(a.cookie); B = socket(b.cookie);
+    await Promise.all([A.open, B.open]);
+    A.send({ t: 'join', code }); B.send({ t: 'join', code });
+    const st = await A.wait((m) => m.t === 'state' && m.view.cells[0] === 0 && m.view.cells[66] === 1);
+    expect(st.view.cells[1]).toBe(0); // board state preserved exactly
+    for (let k = 2; k < 5; k++) {
+      A.send({ t: 'act', action: { type: 'place', i: k } }); await B.wait((m) => m.t === 'state' && m.view.cells[k] === 0);
+      if (k < 4) { B.send({ t: 'act', action: { type: 'place', i: 65 + k } }); await A.wait((m) => m.t === 'state' && m.view.cells[65 + k] === 1); }
+    }
+    const done = await B.wait((m) => m.t === 'room' && m.room.status === 'done');
+    expect(done.room.result.winner).toBe(a.id);
+    // Exactly one match record for this room start, even across the restart.
+    expect(db().all('SELECT id FROM matches WHERE room_code = ?', code)).toHaveLength(1);
+    const hist = await api(b.cookie, '/api/me/matches');
+    expect(hist.matches[0]).toMatchObject({ game_id: 'connect-five', outcome: 'loss' });
+    A.ws.close(); B.ws.close();
+  });
+  it('lobby members who disconnect can rejoin within the grace period', async () => {
+    const { restoreRooms, _dropMemoryForTests } = await import('../server/rooms');
+    const a = await user('lga'), b = await user('lgb');
+    const { code } = await api(a.cookie, '/api/rooms', { gameId: 'hex-conquest' });
+    let A = socket(a.cookie); const B = socket(b.cookie);
+    await Promise.all([A.open, B.open]);
+    A.send({ t: 'join', code }); B.send({ t: 'join', code });
+    await A.wait((m) => m.t === 'room' && m.room.members.length === 2);
+    A.ws.terminate();
+    await B.wait((m) => m.t === 'room' && m.room.members.some((x: any) => x.userId === a.id && !x.connected));
+    _dropMemoryForTests(); restoreRooms();
+    A = socket(a.cookie); await A.open;
+    A.send({ t: 'join', code });
+    const r = await A.wait((m) => m.t === 'room' && m.room.members.find((x: any) => x.userId === a.id)?.connected);
+    expect(r.room.hostId).toBe(a.id); // host keeps the room through a dropped connection
+    A.ws.close(); B.ws.close();
+  });
+});

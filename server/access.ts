@@ -24,19 +24,46 @@ export const AGE_ASSURANCE_PROVIDERS: Record<string, { strong: boolean; producti
   // Production providers (e.g. DigiLocker-based or document + liveness checks) are added only after legal review.
 };
 
+/** Roles allowed into the isolated internal QA preview (never a substitute for legal clearance). */
+export const QA_ROLES = ['admin', 'tester'] as const;
+/** Internal QA preview applies only on a non-production server with the flag on, and only to admin/tester accounts. */
+export function isQaPreview(u: User | null | undefined): boolean {
+  return !!u && config.adultDevPreview && !config.production && (QA_ROLES as readonly string[]).includes(u.role);
+}
+
+/** Latest legal review record for a game (documentation of counsel's written decision). */
+export function latestLegalReview(gameId: string, scope = 'india_law') {
+  return db().get<{ id: number; status: string; reference: string | null; reviewer: string | null; created_at: string }>(
+    'SELECT id, status, reference, reviewer, created_at FROM legal_reviews WHERE game_id = ? AND scope = ? ORDER BY id DESC LIMIT 1', gameId, scope,
+  ) ?? null;
+}
+
 export type LegalGate = 'approved' | 'dev-preview' | 'pending_legal_review';
-export function legalGate(gameId: string): { status: LegalGate; ref: string | null } {
-  if (config.legalApprovals[gameId]) return { status: 'approved', ref: config.legalApprovals[gameId] };
-  if (config.adultDevPreview) return { status: 'dev-preview', ref: null };
+/**
+ * Two-key legal gate. A game is 'approved' only when ALL of these hold:
+ *  1. the Lounge master switch PLAYZO_LOUNGE_ENABLED is on (server config),
+ *  2. PLAYZO_LEGAL_APPROVALS names the game with a reference (server config, not the admin UI), and
+ *  3. the latest legal_reviews record for the game is 'approved' with that same reference.
+ * Otherwise only an internal QA account on a dev server sees a 'dev-preview'.
+ */
+export function legalGate(gameId: string, u?: User | null): { status: LegalGate; ref: string | null } {
+  const ref = config.legalApprovals[gameId];
+  if (config.loungeEnabled && ref) {
+    const rec = latestLegalReview(gameId);
+    if (rec && rec.status === 'approved' && rec.reference === ref) return { status: 'approved', ref };
+  }
+  if (isQaPreview(u)) return { status: 'dev-preview', ref: null };
   return { status: 'pending_legal_review', ref: null };
 }
 
-export interface LoungeAccess { entitled: boolean; reasons: string[]; cooloffUntil: string | null }
+export interface LoungeAccess { entitled: boolean; reasons: string[]; cooloffUntil: string | null; qaPreview: boolean; visible: boolean }
 
 /** Is this user entitled to the Lounge environment at all (independent of individual game gates)? */
 export function loungeAccess(u: User | null): LoungeAccess {
   const reasons: string[] = [];
-  if (!u) return { entitled: false, reasons: ['not_signed_in'], cooloffUntil: null };
+  if (!u) return { entitled: false, reasons: ['not_signed_in'], cooloffUntil: null, qaPreview: false, visible: false };
+  const qa = isQaPreview(u);
+  if (!config.loungeEnabled && !qa) reasons.push('lounge_disabled');
   if (u.is_guest) reasons.push('guest_account');
   if (u.age_band !== 'adult') reasons.push('not_adult');
   // Re-check DOB at request time (people age; bands are cached).
@@ -44,12 +71,19 @@ export function loungeAccess(u: User | null): LoungeAccess {
   const method = u.adult_verify_method as string | null;
   const provider = method ? AGE_ASSURANCE_PROVIDERS[method] : undefined;
   if (!u.adult_verified_at || !provider) reasons.push('age_not_verified');
-  else if (config.production && !provider.production) reasons.push('age_verification_not_production_grade');
+  else if (!provider.production && (config.production || !qa)) reasons.push('age_verification_not_production_grade');
+  else if (Date.now() - Date.parse(u.adult_verified_at) > config.ageVerificationDays * 86400_000) reasons.push('age_verification_expired');
   const consent = db().get('SELECT 1 AS ok FROM consents WHERE user_id = ? AND kind = ?', u.id, 'lounge_terms');
   if (!consent) reasons.push('lounge_terms_not_accepted');
   const cool = (u as any).lounge_cooloff_until as string | null;
   if (cool && cool > new Date().toISOString()) reasons.push('cool_off_active');
-  return { entitled: reasons.length === 0, reasons: [...new Set(reasons)], cooloffUntil: cool && cool > new Date().toISOString() ? cool : null };
+  const adult = !u.is_guest && u.age_band === 'adult' && (!u.dob || bandFor(ageOn(u.dob)) === 'adult');
+  return {
+    entitled: reasons.length === 0, reasons: [...new Set(reasons)], cooloffUntil: cool && cool > new Date().toISOString() ? cool : null,
+    qaPreview: qa,
+    // The Lounge entry point is shown only to adults, and only when the Lounge is switched on or for QA accounts.
+    visible: adult && (config.loungeEnabled || qa),
+  };
 }
 
 /** Can the user see this game in listings/APIs at all? Lounge games are invisible without entitlement. */
@@ -73,7 +107,7 @@ export function canPlay(u: User, gameId: string): { ok: true; gate?: LegalGate }
   const acc = loungeAccess(u);
   // Do not reveal Lounge game existence to non-entitled users.
   if (!acc.entitled) return { ok: false, status: 404, code: 'NOT_FOUND', message: 'Game not found' };
-  const gate = legalGate(gameId);
+  const gate = legalGate(gameId, u);
   if (gate.status === 'pending_legal_review') return { ok: false, status: 451, code: 'LEGAL_GATE', message: 'This simulation is disabled until legal review is complete.' };
   return { ok: true, gate: gate.status };
 }

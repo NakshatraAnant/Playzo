@@ -75,6 +75,8 @@ export interface Engine<S = any, A = any> {
    * house's favour.
    */
   finalize?(s: S, ctx: Ctx): S;
+  /** Server-timed engines: move every server deadline forward by dt ms (used when a solo game is paused). */
+  shiftTime?(s: S, dt: number): S;
 }
 
 export class GameError extends Error {

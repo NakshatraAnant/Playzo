@@ -140,7 +140,10 @@ export function dailyPuzzle(day = dayKey()) {
 export interface CompletionInput {
   userId: string; gameId: string; sessionId: string | null; score: number; won: boolean; vsAi: boolean; difficulty: string;
   context: 'solo' | 'daily' | 'challenge' | 'race' | 'room'; multiplayer: boolean;
+  /** Paused solo runs still earn XP and missions but never enter leaderboards or personal bests. */
+  rankable?: boolean;
 }
+export const seasonKey = (d = new Date()) => d.toISOString().slice(0, 7);
 export interface CompletionOutput { xp: number; zo: number; level: number; leveledUp: boolean; personalBest: boolean; achievements: string[] }
 
 export function recordCompletion(c: CompletionInput): CompletionOutput {
@@ -150,14 +153,15 @@ export function recordCompletion(c: CompletionInput): CompletionOutput {
   return db().tx(() => {
     const prev = db().get<{ plays: number; best_score: number }>('SELECT plays, best_score FROM game_stats WHERE user_id = ? AND game_id = ?', c.userId, c.gameId);
     const newGame = !prev;
-    out.personalBest = !prev || c.score > prev.best_score;
+    const rankable = c.rankable !== false;
+    out.personalBest = rankable && (!prev || c.score > prev.best_score);
     db().run(
       `INSERT INTO game_stats (user_id, game_id, plays, wins, best_score, total_score, mastery_xp, last_played_at) VALUES (?, ?, 1, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, game_id) DO UPDATE SET plays = plays + 1, wins = wins + excluded.wins, best_score = MAX(best_score, excluded.best_score),
          total_score = total_score + excluded.total_score, mastery_xp = mastery_xp + excluded.mastery_xp, last_played_at = excluded.last_played_at`,
-      c.userId, c.gameId, c.won ? 1 : 0, c.score, c.score, 10 + (c.won ? 10 : 0), nowIso(),
+      c.userId, c.gameId, c.won ? 1 : 0, rankable ? c.score : 0, c.score, 10 + (c.won ? 10 : 0), nowIso(),
     );
-    db().run('INSERT INTO scores (user_id, game_id, score, period_week, period_day, context, session_id) VALUES (?, ?, ?, ?, ?, ?, ?)', c.userId, c.gameId, c.score, weekKey(), dayKey(), c.context, c.sessionId);
+    if (rankable) db().run('INSERT INTO scores (user_id, game_id, score, period_week, period_day, context, session_id) VALUES (?, ?, ?, ?, ?, ?, ?)', c.userId, c.gameId, c.score, weekKey(), dayKey(), c.context, c.sessionId);
     // XP: participation + performance (bounded) + win; difficulty multiplier.
     const diffMult = c.difficulty === 'hard' ? 1.5 : c.difficulty === 'easy' ? 0.8 : 1;
     out.xp = Math.round((15 + Math.min(35, Math.floor(c.score / 60)) + (c.won ? 20 : 0) + (out.personalBest ? 10 : 0)) * diffMult);
@@ -166,6 +170,11 @@ export function recordCompletion(c: CompletionInput): CompletionOutput {
     out.level = levelFor(xp);
     out.leveledUp = out.level > u.level;
     db().run('UPDATE users SET xp = ?, level = ? WHERE id = ?', xp, out.level, c.userId);
+    // Monthly season standings are driven by XP earned (participation-weighted, not spend-driven).
+    db().run(
+      'INSERT INTO season_points (user_id, season, points, games) VALUES (?, ?, ?, 1) ON CONFLICT(user_id, season) DO UPDATE SET points = points + excluded.points, games = games + 1',
+      c.userId, seasonKey(), out.xp,
+    );
     // ZO: modest, capped per day.
     const want = 5 + (c.won ? 10 : 0) + (out.personalBest ? 5 : 0) + (out.leveledUp ? 25 : 0);
     const room = Math.max(0, ZO_DAILY_GAME_CAP - zoEarnedToday(c.userId));

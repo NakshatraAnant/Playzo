@@ -10,7 +10,7 @@ export class HttpError extends Error {
 
 export interface User extends Row {
   id: string; username: string; display_name: string; email: string | null; is_guest: number; age_band: 'unknown' | 'child' | 'teen' | 'adult';
-  role: 'user' | 'support' | 'admin'; status: string; dob: string | null; adult_verified_at: string | null; parental_consent_at: string | null;
+  role: 'user' | 'tester' | 'support' | 'admin'; status: string; dob: string | null; adult_verified_at: string | null; parental_consent_at: string | null;
 }
 
 export const SESSION_COOKIE = 'pz_session';
@@ -27,6 +27,11 @@ export function currentUser(req: FastifyRequest): User | null {
        WHERE s.token_hash = ? AND s.revoked_at IS NULL AND s.expires_at > ? AND u.status = 'active'`,
       sha256(token), new Date().toISOString(),
     ) ?? null;
+  }
+  if (user && token) {
+    // Track last use for the session list (at most one write per session every 5 minutes).
+    const now = new Date();
+    db().run('UPDATE auth_sessions SET last_used_at = ? WHERE token_hash = ? AND (last_used_at IS NULL OR last_used_at < ?)', now.toISOString(), sha256(token), new Date(now.getTime() - 300_000).toISOString());
   }
   (req as any)._user = user;
   return user;

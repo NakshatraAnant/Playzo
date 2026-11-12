@@ -3,9 +3,9 @@ import { api } from './api';
 
 export interface Me {
   id: string; username: string; displayName: string; email: string | null; isGuest: boolean; ageBand: 'unknown' | 'child' | 'teen' | 'adult';
-  role: 'user' | 'support' | 'admin'; avatar: string; frame: string | null; theme: string | null; xp: number; level: number; emailVerified: boolean;
+  role: 'user' | 'tester' | 'support' | 'admin'; avatar: string; frame: string | null; theme: string | null; xp: number; level: number; emailVerified: boolean;
   parentalConsent: boolean; adultVerified: boolean; adultVerifyMethod: string | null; premium: boolean; premiumUntil: string | null; privacy: string; allowFriendRequests: boolean;
-  balances: { ZO: number; CHIPS?: number }; lounge: { entitled: boolean; reasons: string[]; cooloffUntil: string | null };
+  balances: { ZO: number; CHIPS?: number }; lounge: { entitled: boolean; reasons: string[]; cooloffUntil: string | null; qaPreview: boolean; visible: boolean };
   social: { canSearchUsers: boolean; canSendFriendRequests: boolean; canJoinPrivateRooms: boolean; canUsePublicMatchmaking: boolean; canPurchase: boolean };
   loungeDailyLimitMin: number | null;
 }

@@ -29,6 +29,7 @@ function makeQ(rng: Rng, difficulty: string): GeoQ {
 
 export const geoSprint: Engine<GeoState, A> = {
   id: 'geo-sprint', rulesVersion: '1.0.0', mode: 'server', players: { min: 1, max: 1 }, timed: true,
+  shiftTime: (s, dt) => { s.start += dt; s.endsAt += dt; if (s.lockedUntil) s.lockedUntil += dt; return s; },
   init(o, ctx) {
     const start = ctx.now + 1000;
     const s: GeoState = { start, endsAt: start + DURATION, q: makeQ(ctx.rng, o.difficulty), n: 0, score: 0, correct: 0, wrong: 0, lockedUntil: 0, missedRegions: {}, over: false, last: null };

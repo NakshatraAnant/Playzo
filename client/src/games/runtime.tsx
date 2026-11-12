@@ -155,6 +155,9 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
   const [chips, setChips] = useState<number | null>(null);
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [run, setRun] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
+  const pausedAt = useRef<number | null>(null);
   const local = useRef<{ state: any; log: any[]; start: number; lastT: number } | null>(null);
   const finishing = useRef(false);
   const tutKey = `pz-tut-${gameId}`;
@@ -162,7 +165,7 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
   useEffect(() => {
     let alive = true;
     (async () => {
-      setPhase('loading'); setDone(null); setErr(null); finishing.current = false;
+      setPhase('loading'); setDone(null); setErr(null); finishing.current = false; setPaused(false); pausedAt.current = null;
       try {
         await ensureSession();
         let s: any = null;
@@ -216,7 +219,7 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
 
   const record = useCallback((action: any, t?: number) => {
     const L = local.current;
-    if (!L || phase !== 'playing' || finishing.current) return false;
+    if (!L || phase !== 'playing' || finishing.current || pausedAt.current !== null) return false;
     const e = REPLAY_ENGINES[gameId];
     const time = Math.max(L.lastT, Math.round(t ?? performance.now() - L.start));
     const a = { ...action, t: time };
@@ -235,6 +238,7 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
 
   const act = useCallback(async (action: any) => {
     if (!session) return null;
+    if (pausedAt.current !== null) return null;
     if (action?.type !== 'tick') setBusy(true);
     try {
       const r = await api.post(`/api/sessions/${session.sessionId}/action`, { action });
@@ -254,15 +258,46 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
     } finally { if (action?.type !== 'tick') setBusy(false); }
   }, [session, toast, refresh, meta.env]);
 
+  const pause = useCallback(async () => {
+    if (!session || pausedAt.current !== null || phase !== 'playing' || meta.env !== 'family' || context !== 'solo') return;
+    pausedAt.current = performance.now();
+    setPaused(true);
+    api.post(`/api/sessions/${session.sessionId}/pause`).catch(() => undefined);
+  }, [session, phase, meta.env, context]);
+  const resumeGame = useCallback(async () => {
+    if (!session || pausedAt.current === null) return;
+    try {
+      const r = await api.post(`/api/sessions/${session.sessionId}/resume`);
+      if (local.current) local.current.start += performance.now() - pausedAt.current;
+      pausedAt.current = null;
+      if (r?.view) setView(r.view);
+      setVersion((v) => v + 1);
+      setPaused(false);
+    } catch (e: any) { toast(e.message, 'bad'); }
+  }, [session, toast]);
+  // Auto-pause solo games when the tab is hidden (phone call, app switch).
+  useEffect(() => {
+    const h = () => { if (document.hidden) pause(); };
+    document.addEventListener('visibilitychange', h);
+    return () => document.removeEventListener('visibilitychange', h);
+  }, [pause]);
+  useKeys({ Escape: () => (pausedAt.current === null ? pause() : resumeGame()) }, [pause, resumeGame]);
+
   const ctl: Ctl = useMemo(() => ({
     meta, mode: session?.mode ?? 'server', view: session?.mode === 'replay' ? local.current?.state : view, version, me: 'p1', difficulty: session?.difficulty ?? difficulty,
-    act, record, finish: submit, elapsed: () => (local.current && phase === 'playing' ? performance.now() - local.current.start : 0),
+    act, record, finish: submit, elapsed: () => (local.current && phase === 'playing' ? (pausedAt.current ?? performance.now()) - local.current.start : 0),
     over: phase === 'done' || phase === 'submitting', busy, room: null, lounge: meta.env === 'lounge', chips, setChips, sessionId: session?.sessionId ?? null, commit: session?.commit ?? null,
   }), [meta, session, view, version, act, record, submit, phase, busy, chips, difficulty]);
 
   if (!meta) return <p>Unknown game.</p>;
   const Comp = COMPONENTS[gameId];
   const replay = () => { setRun((r) => r + 1); };
+  const pausable = meta.env === 'family' && context === 'solo' && phase === 'playing' && !!session;
+  const restart = async () => {
+    setConfirmRestart(false);
+    if (session?.sessionId && phase !== 'done') await api.post(`/api/sessions/${session.sessionId}/end`).catch(() => undefined);
+    replay();
+  };
 
   return (
     <div className={`stage ${meta.env === 'lounge' ? 'lounge' : ''}`}>
@@ -279,6 +314,8 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
         </div>
         <span className="spacer" />
         {chips !== null && <span className="chip gold mono">{chips.toLocaleString()} chips</span>}
+        {pausable && <button className="btn btn-ghost icon-btn" onClick={() => pause()} aria-label="Pause game" data-testid="pause"><Icon name="pause" /></button>}
+        {meta.env === 'family' && context === 'solo' && (phase === 'playing' || phase === 'done') && <button className="btn btn-ghost icon-btn" onClick={() => setConfirmRestart(true)} aria-label="Restart game" data-testid="restart"><Icon name="refresh" /></button>}
         <button className="btn btn-ghost icon-btn" onClick={() => setTutorialOpen(true)} aria-label="How to play"><Icon name="info" /></button>
       </div>
       <div className="stage-body">
@@ -305,6 +342,24 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
           </>
         )}
       </div>
+      {paused && (
+        <div className="pause-overlay" role="dialog" aria-modal="true" aria-label="Game paused" data-testid="pause-overlay">
+          <div className="panel" style={{ maxWidth: 360, textAlign: 'center' }}>
+            <Icon name="pause" size={34} />
+            <h2 style={{ margin: '8px 0' }}>Paused</h2>
+            <p className="muted" style={{ fontSize: 14 }}>The clock is stopped. Paused runs still earn XP and missions but don't count for leaderboards.</p>
+            <div className="col" style={{ marginTop: 14 }}>
+              <button className="btn btn-primary btn-lg" onClick={() => resumeGame()} autoFocus data-testid="resume"><Icon name="play" />Resume</button>
+              <button className="btn" onClick={() => setConfirmRestart(true)}><Icon name="refresh" />Restart</button>
+              <Link className="btn btn-ghost" to={`/games/${meta.id}`}>Quit to game page</Link>
+            </div>
+          </div>
+        </div>
+      )}
+      <Modal open={confirmRestart} onClose={() => setConfirmRestart(false)} title="Restart this game?">
+        <p className="muted">Your current run will end without a score and a fresh one starts.</p>
+        <div className="row" style={{ marginTop: 16 }}><button className="btn btn-primary" onClick={restart} data-testid="confirm-restart">Restart</button><button className="btn btn-ghost" onClick={() => setConfirmRestart(false)}>Cancel</button></div>
+      </Modal>
       <Tutorial meta={meta} open={tutorialOpen} onClose={closeTutorial} />
     </div>
   );

@@ -61,7 +61,7 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post('/api/admin/users/:id/role', async (req) => {
     const admin = requireRole(req, ['admin']);
     const role = String((req.body as any)?.role);
-    if (!['user', 'support', 'admin'].includes(role)) throw new HttpError(400, 'Bad role', 'VALIDATION');
+    if (!['user', 'tester', 'support', 'admin'].includes(role)) throw new HttpError(400, 'Bad role', 'VALIDATION');
     db().run('UPDATE users SET role = ? WHERE id = ? AND is_guest = 0', role, (req.params as any).id);
     audit(admin.id, 'admin.user_role', (req.params as any).id, { role });
     return { ok: true };

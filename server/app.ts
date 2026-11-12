@@ -14,6 +14,9 @@ import { roomRoutes } from './rooms';
 import { contentRoutes } from './content';
 import { shopRoutes } from './shop';
 import { adminRoutes } from './admin';
+import { notifyRoutes } from './notify';
+import { rewardRoutes } from './rewards';
+import { retryDueEmails, emailStatus } from './email';
 import { seoRoutes } from './seo';
 import { seed } from './seed';
 import { ENGINES } from './games/registry';
@@ -61,6 +64,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
     ok: true, service: 'playzo-api', time: new Date().toISOString(),
     db: !!db().get('SELECT 1 AS ok'), migrations: db().all('SELECT name FROM schema_migrations').map((r: any) => r.name),
     engines: Object.keys(ENGINES).length, dictionary: dictionarySize(), devMode: config.devMode, production: config.production,
+    uptimeSec: Math.round(process.uptime()), email: emailStatus().provider, emailConfigured: emailStatus().configured, loungeEnabled: config.loungeEnabled,
   }));
 
   await app.register(authRoutes);
@@ -70,6 +74,8 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(contentRoutes);
   await app.register(shopRoutes);
   await app.register(adminRoutes);
+  await app.register(notifyRoutes);
+  await app.register(rewardRoutes);
 
   app.all('/api/*', async (_req, reply) => reply.code(404).send({ error: 'Not found', code: 'NOT_FOUND' }));
 
@@ -88,5 +94,6 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   }
 
   setInterval(() => { try { reapSessions(); } catch (e) { console.error('[reaper]', e); } }, 10 * 60_000).unref();
+  setInterval(() => { try { retryDueEmails(); } catch (e) { console.error('[email]', e); } }, 30_000).unref();
   return app;
 }

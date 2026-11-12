@@ -277,3 +277,7 @@ table.data tr:hover td { background: rgba(255, 255, 255, 0.02); }
 /* Intro */
 .intro { position: fixed; inset: 0; z-index: 100; background: var(--bg-0); display: grid; place-items: center; overflow: hidden; }
 .intro .skip { position: absolute; right: 16px; top: calc(16px + env(safe-area-inset-top)); }
+
+/* Pause overlay (solo family games) */
+.pause-overlay { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(5, 3, 14, .82); backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); }
+.pause-overlay .col { gap: 10px; }

@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { notify } from './notify';
 import { db, nowIso } from './db';
 import { HttpError, requireUser, currentUser, str, rateLimit, audit, User } from './http';
 import { socialPolicy } from './access';
@@ -88,9 +89,11 @@ export async function socialRoutes(app: FastifyInstance) {
     if (ex && ex.requested_by !== u.id) {
       db().run("UPDATE friendships SET status = 'accepted' WHERE user_a = ? AND user_b = ?", a, b);
       unlock(u.id, 'friend_1'); unlock(t.id, 'friend_1');
+      notify(t.id, 'friend', `${u.display_name} accepted your friend request`, undefined, '/friends');
       return { status: 'accepted' };
     }
     db().run("INSERT OR IGNORE INTO friendships (user_a, user_b, status, requested_by) VALUES (?, ?, 'pending', ?)", a, b, u.id);
+    notify(t.id, 'friend', `${u.display_name} sent you a friend request`, 'Open Friends to accept or decline.', '/friends');
     track('friend_request', u.id);
     return { status: 'pending' };
   });
@@ -105,6 +108,7 @@ export async function socialRoutes(app: FastifyInstance) {
     if (accept) {
       db().run("UPDATE friendships SET status = 'accepted' WHERE user_a = ? AND user_b = ?", a, b);
       unlock(u.id, 'friend_1'); unlock(other, 'friend_1');
+      notify(other, 'friend', `${u.display_name} accepted your friend request`, undefined, '/friends');
     } else db().run('DELETE FROM friendships WHERE user_a = ? AND user_b = ?', a, b);
     return { ok: true };
   });
@@ -161,6 +165,7 @@ export async function socialRoutes(app: FastifyInstance) {
     } else if (u.age_band === 'child' || u.is_guest) throw new HttpError(403, 'Open challenge links are not available on this account', 'FORBIDDEN');
     const id = newId('ch_');
     db().run('INSERT INTO challenges (id, from_user, to_user, game_id, difficulty, seed, expires_at) VALUES (?, ?, ?, ?, ?, ?, ?)', id, u.id, to, meta.id, difficulty, `challenge:${id}`, new Date(Date.now() + 7 * 86400_000).toISOString());
+    if (to) notify(to, 'challenge', `${u.display_name} challenged you to ${meta.title}`, 'Same puzzle, same seed. Can you beat their score?', `/challenge/${id}`);
     track('challenge_created', u.id, { game: meta.id, direct: !!to });
     return { id, link: `/challenge/${id}` };
   });

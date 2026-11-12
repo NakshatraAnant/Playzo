@@ -139,9 +139,9 @@ export function Room() {
         if (m.t === 'room') setRoom(m.room);
         if (m.t === 'state') setState((p) => ({ view: m.view, v: (p?.v ?? 0) + 1 }));
         if (m.t === 'emote') { const id = Date.now() + Math.random(); setFloating((f) => [...f, { id, e: m.e, from: m.from }]); setTimeout(() => setFloating((f) => f.filter((x) => x.id !== id)), 2200); }
-        if (m.t === 'error') { if (m.code === 'NOT_FOUND' || m.code === 'STARTED' || m.code === 'FULL' || m.code === 'FORBIDDEN') setErr(m.message); else toast(m.message, 'bad'); }
+        if (m.t === 'error') { if (['NOT_FOUND', 'STARTED', 'FULL', 'FORBIDDEN', 'CLOSED'].includes(m.code)) { alive = false; setErr(m.message); } else toast(m.message, 'bad'); }
       };
-      s.onclose = () => { setConn('closed'); if (alive && retry < 5) { retry++; setTimeout(connect, 800 * retry); } };
+      s.onclose = () => { setConn('closed'); if (alive && retry < 15) { retry++; setTimeout(connect, Math.min(5000, 600 * retry)); } };
     };
     connect();
     return () => { alive = false; ws.current?.send(JSON.stringify({ t: 'leave' })); ws.current?.close(); };

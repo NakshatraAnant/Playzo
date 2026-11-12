@@ -72,9 +72,9 @@ function GateFlow() {
 export function Lounge() {
   useTitle('Lounge');
   const { me } = useStore();
-  const { data, error, reload } = useAsync(() => (me?.ageBand === 'adult' ? api.get('/api/lounge/status') : Promise.resolve(null)), [me?.id, me?.lounge.entitled]);
+  const { data, error, reload } = useAsync(() => (me?.lounge?.visible ? api.get('/api/lounge/status') : Promise.resolve(null)), [me?.id, me?.lounge.entitled]);
   const games = useAsync(() => (me?.lounge.entitled ? api.get('/api/games?env=lounge') : Promise.resolve({ games: [] })), [me?.lounge.entitled]);
-  if (!me || me.ageBand !== 'adult') return <NotAvailable />;
+  if (!me || me.ageBand !== 'adult' || !me.lounge.visible) return <NotAvailable />;
   if (!me.lounge.entitled) return <GateFlow />;
   if (error) return <ErrorBox message={error} retry={reload} />;
   const cats = ['Table & Wheel', 'Card & Social', 'Slots', 'Instant'];

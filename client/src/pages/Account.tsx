@@ -231,7 +231,7 @@ export function Settings() {
           <div className="row wrap"><input className="input" type="password" placeholder="Current" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} style={{ flex: 1 }} autoComplete="current-password" aria-label="Current password" /><input className="input" type="password" placeholder="New (8+ characters)" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} style={{ flex: 1 }} autoComplete="new-password" aria-label="New password" /><button className="btn">Update</button></div>
         </form>
       )}
-      {me.ageBand === 'adult' && (
+      {me.lounge?.visible && (
         <div className="panel">
           <div className="panel-title"><Icon name="clock" /><h3>Lounge play controls</h3></div>
           <div className="row wrap">

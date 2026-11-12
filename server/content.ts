@@ -18,7 +18,7 @@ function card(g: GameMeta, u: User | null) {
   return {
     ...g, mode: e.mode, live: gameStatus(g.id) === 'live', status: gameStatus(g.id),
     multiplayer: g.formats.some((f) => ['versus', 'teams', 'group', 'race'].includes(f)),
-    gate: g.env === 'lounge' ? legalGate(g.id).status : undefined,
+    gate: g.env === 'lounge' ? legalGate(g.id, u).status : undefined,
     me: u ? { plays: stats?.plays ?? 0, best: stats?.best_score ?? 0, wins: stats?.wins ?? 0, favourite: fav } : null,
   };
 }
@@ -103,7 +103,7 @@ export async function contentRoutes(app: FastifyInstance) {
       launchLineup: FAMILY.map((g) => g.id),
       missions: u ? missionsFor(u.id) : null,
       streak: u ? streak(u.id) : 0,
-      lounge: u ? { entitled: loungeAccess(u).entitled } : { entitled: false },
+      lounge: u ? { entitled: loungeAccess(u).entitled, visible: loungeAccess(u).visible } : { entitled: false, visible: false },
     };
   });
 
@@ -132,11 +132,11 @@ export async function contentRoutes(app: FastifyInstance) {
   app.get('/api/lounge/status', async (req) => {
     const u = requireUser(req);
     const acc = loungeAccess(u);
-    if (u.age_band !== 'adult') throw new HttpError(404, 'Not found', 'NOT_FOUND'); // invisible to minors
+    if (u.age_band !== 'adult' || !acc.visible) throw new HttpError(404, 'Not found', 'NOT_FOUND'); // invisible to minors, and to everyone while the Lounge is switched off
     if (acc.entitled) dailyChipsTopUp(u.id);
     return {
       access: acc, chips: acc.entitled ? balance(u.id, 'CHIPS') : 0, minutesToday: Math.round(loungeMinutesToday(u.id)), dailyLimitMin: u.lounge_daily_limit_min,
-      gates: acc.entitled ? Object.fromEntries(CATALOGUE.filter((g) => g.env === 'lounge').map((g) => [g.id, legalGate(g.id)])) : null,
+      gates: acc.entitled ? Object.fromEntries(CATALOGUE.filter((g) => g.env === 'lounge').map((g) => [g.id, legalGate(g.id, u)])) : null,
       ledger: acc.entitled ? history(u.id, 30).filter((l: any) => l.currency === 'CHIPS') : [],
     };
   });

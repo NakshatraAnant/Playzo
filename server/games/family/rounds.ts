@@ -32,6 +32,12 @@ export function initRounds(players: string[], qs: RoundQ[], limitMs: number, now
   };
 }
 
+/** Pause support: move every server deadline forward by dt ms. */
+export function shiftRounds<S extends RoundsState>(s: S, dt: number): S {
+  s.qStart += dt; s.deadline += dt; if (s.revealUntil) s.revealUntil += dt;
+  return s;
+}
+
 export function advance(s: RoundsState, now: number): void {
   for (let guard = 0; guard < 4; guard++) {
     if (s.phase === 'question') {

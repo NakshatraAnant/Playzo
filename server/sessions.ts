@@ -24,7 +24,7 @@ export type Context = 'solo' | 'daily' | 'challenge' | 'race';
 interface SessionRow {
   id: string; user_id: string; game_id: string; env: string; mode: string; status: string; difficulty: Difficulty; seed: string; seed_commit: string;
   rng_cursor: number; rules_version: string; state: string | null; context: Context; context_ref: string | null; score: number | null; result: string | null;
-  started_ms: number; started_at: string; ended_at: string | null;
+  started_ms: number; started_at: string; ended_at: string | null; paused_at?: number | null; paused_total_ms?: number; was_paused?: number;
 }
 
 export const SOLO = 'p1';
@@ -138,6 +138,7 @@ export async function act(u: User, id: string, action: unknown) {
     const row = owned(u, id);
     if (row.status !== 'active') throw new HttpError(409, 'This session has ended', 'SESSION_ENDED');
     if (row.mode !== 'server') throw new HttpError(400, 'Submit replay games with /submit', 'VALIDATION');
+    if (row.paused_at) throw new HttpError(409, 'This game is paused. Resume to continue.', 'PAUSED');
     if (!action || typeof action !== 'object' || JSON.stringify(action).length > 4000) throw new HttpError(400, 'Bad action', 'VALIDATION');
     const engine = ENGINES[row.game_id];
     if (row.env === 'lounge') {
@@ -191,7 +192,7 @@ function complete(u: User, row: SessionRow, engine: Engine, state: any): Complet
   let won = res.winner === SOLO;
   if (row.game_id === 'tower-tactics') won = (res.summary as any)?.waves === 10 && (res.summary as any)?.shields > 0;
   db().run("UPDATE game_sessions SET status = 'completed', score = ?, result = ?, ended_at = ? WHERE id = ?", score, JSON.stringify(res), nowIso(), row.id);
-  const out = recordCompletion({ userId: u.id, gameId: row.game_id, sessionId: row.id, score, won, vsAi, difficulty: row.difficulty, context: row.context, multiplayer: row.context === 'race' });
+  const out = recordCompletion({ userId: u.id, gameId: row.game_id, sessionId: row.id, score, won, vsAi, difficulty: row.difficulty, context: row.context, multiplayer: row.context === 'race', rankable: !row.was_paused });
   if (row.context === 'challenge' && row.context_ref) hooks.challengeFinished?.(row.context_ref, u.id, score);
   if (row.context === 'race' && row.context_ref) hooks.raceFinished?.(row.context_ref, u.id, score, row.id);
   track('game_complete', u.id, { game: row.game_id, score, won, context: row.context });
@@ -248,6 +249,36 @@ export async function submit(u: User, id: string, body: { actions?: unknown; con
     });
     const res = engine.result(state);
     return { verified: true, score: Math.max(0, Math.round(res.scores[SOLO] ?? 0)), result: res, completion };
+  });
+}
+
+/* ---------------- pause / resume (solo family games only) ----------------
+ * Server-timed engines shift their deadlines by the paused duration (engine.shiftTime), so the
+ * clock genuinely stops. Replay games pause their local clock; the server only records the flag.
+ * Paused runs keep XP and missions but are excluded from leaderboards and personal bests,
+ * so pausing can never be used to gain a ranking advantage. */
+export async function pauseSession(u: User, id: string) {
+  return withLock(id, () => {
+    const row = owned(u, id);
+    if (row.status !== 'active') throw new HttpError(409, 'This session has ended', 'SESSION_ENDED');
+    if (row.env !== 'family' || row.context !== 'solo') throw new HttpError(400, 'Only solo family games can be paused', 'NOT_PAUSABLE');
+    if (row.paused_at) return { paused: true, serverNow: Date.now() };
+    db().run('UPDATE game_sessions SET paused_at = ?, was_paused = 1 WHERE id = ?', Date.now(), row.id);
+    track('game_pause', u.id, { game: row.game_id });
+    return { paused: true, serverNow: Date.now() };
+  });
+}
+export async function resumeSession(u: User, id: string) {
+  return withLock(id, () => {
+    const row = owned(u, id);
+    if (row.status !== 'active') throw new HttpError(409, 'This session has ended', 'SESSION_ENDED');
+    if (!row.paused_at) return { paused: false, view: row.mode === 'server' && row.state ? ENGINES[row.game_id].view(JSON.parse(row.state), SOLO) : null, serverNow: Date.now() };
+    const dt = Math.max(0, Date.now() - row.paused_at);
+    const engine = ENGINES[row.game_id];
+    let state = row.state ? JSON.parse(row.state) : null;
+    if (state && engine.shiftTime) state = engine.shiftTime(state, dt);
+    db().run('UPDATE game_sessions SET paused_at = NULL, paused_total_ms = paused_total_ms + ?, state = ? WHERE id = ?', dt, state ? JSON.stringify(state) : row.state, row.id);
+    return { paused: false, pausedMs: dt, view: row.mode === 'server' && state ? engine.view(state, SOLO) : null, serverNow: Date.now() };
   });
 }
 
@@ -323,4 +354,6 @@ export async function sessionRoutes(app: FastifyInstance) {
     return submit(u, (req.params as any).id, (req.body ?? {}) as any);
   });
   app.post('/api/sessions/:id/end', async (req) => endSession(requireUser(req), (req.params as any).id));
+  app.post('/api/sessions/:id/pause', async (req) => pauseSession(requireUser(req), (req.params as any).id));
+  app.post('/api/sessions/:id/resume', async (req) => resumeSession(requireUser(req), (req.params as any).id));
 }
