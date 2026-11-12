@@ -4,6 +4,8 @@ const P: Record<string, string> = {
   compass: 'M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM15.5 8.5l-2 5-5 2 2-5z',
   play: 'M7 4.5v15l12-7.5z',
   pause: 'M8 5v14M16 5v14',
+  music: 'M9 18V5l11-2v13M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM20 16a3 3 0 1 1-6 0 3 3 0 0 1 6 0z',
+  'music-off': 'M9 18V9M9 5l11-2v9M9 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0zM3 3l18 18',
   bell: 'M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 20.5a2 2 0 0 0 4 0',
   gift: 'M4 11h16v10H4zM3 7h18v4H3zM12 7v14M12 7c-1.5-3-5-3.5-5-1s3 1 5 1zm0 0c1.5-3 5-3.5 5-1s-3 1-5 1z',
   mail: 'M3 6h18v12H3zM3 7l9 6 9-6',

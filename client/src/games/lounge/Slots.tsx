@@ -79,7 +79,7 @@ export default function Slots() {
       const r = await ctl.act({ type: 'spin', bet: b });
       setSpinKey((k) => k + 1);
       const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      setTimeout(() => { r.view.last.jackpot ? sfx.fanfare() : r.view.last.total > b ? sfx.win() : r.view.last.total ? sfx.coin() : sfx.thud(); setSpinning(false); }, reduced ? 50 : 300 + reels * 220);
+      setTimeout(() => { r.view.last.total > b ? sfx.win() : r.view.last.total ? sfx.neutral() : sfx.thud(); setSpinning(false); }, reduced ? 50 : 300 + reels * 220);
     } catch { setSpinning(false); setAuto(0); }
   };
   useEffect(() => { if (auto > 0 && !spinning) { const t = setTimeout(() => { setAuto((a) => a - 1); spin(); }, 650); return () => clearTimeout(t); } }, [auto, spinning]); // eslint-disable-line react-hooks/exhaustive-deps

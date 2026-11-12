@@ -7,7 +7,8 @@ import type { Difficulty } from '@shared/engine';
 import { SeededRng } from '@shared/rng';
 import { api, ApiError, serverNow } from '../lib/api';
 import { useStore } from '../lib/store';
-import { sfx } from '../lib/sound';
+import { sfx, stinger, prefs, setPref, onPrefs } from '../lib/sound';
+import { music } from '../lib/music';
 import { Icon } from '../components/Icon';
 import { Modal, Chip } from '../components/ui';
 
@@ -76,8 +77,8 @@ export function Tutorial({ meta, open, onClose }: { meta: GameMeta; open: boolea
 function Countdown({ onDone }: { onDone: () => void }) {
   const [n, setN] = useState(3);
   useEffect(() => {
-    if (n === 0) { onDone(); return; }
-    sfx.tick();
+    if (n === 0) { sfx.count(true); onDone(); return; }
+    sfx.count(false);
     const t = setTimeout(() => setN(n - 1), 650);
     return () => clearTimeout(t);
   }, [n, onDone]);
@@ -96,7 +97,15 @@ export function Results({ meta, score, completion, verified, result, onReplay, e
   const { me, toast } = useStore();
   const nav = useNavigate();
   const [busy, setBusy] = useState(false);
-  useEffect(() => { completion?.leveledUp ? sfx.level() : sfx.fanfare(); }, [completion]);
+  useEffect(() => {
+    const won = result?.winner === 'p1' || (!!me && result?.winner === me.id);
+    if (completion?.leveledUp) stinger('levelUp');
+    else if (result?.winner !== undefined && result?.winner !== null) stinger(won ? 'victory' : 'defeat');
+    else if (completion?.personalBest) stinger('victory');
+    else stinger('complete');
+    if (completion?.achievements?.length) { const t = setTimeout(() => sfx.achievement(), 900); return () => clearTimeout(t); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [completion]);
   const challenge = async () => {
     setBusy(true);
     try {
@@ -261,9 +270,20 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
     } finally { if (action?.type !== 'tick') setBusy(false); }
   }, [session, toast, refresh, meta.env]);
 
+  // Adaptive soundtrack: quiet intro while loading/tutorial/countdown, full arrangement in play, stop at results.
+  useEffect(() => {
+    if (phase === 'loading' || phase === 'tutorial' || phase === 'countdown') music.play(gameId, { intensity: 0.3 });
+    else if (phase === 'playing') { music.play(gameId, { intensity: 0.75 }); music.setIntensity(0.75); }
+    else if (phase === 'submitting') music.setIntensity(0.3);
+    else music.stop(1.2);
+  }, [phase, gameId, run]);
+  useEffect(() => { music.setUrgency(0); }, [run]);
+  useEffect(() => () => music.stop(0.6), [gameId]);
+
   const pause = useCallback(async () => {
     if (!session || pausedAt.current !== null || phase !== 'playing' || meta.env !== 'family' || context !== 'solo') return;
     pausedAt.current = performance.now();
+    music.pause();
     setPaused(true);
     api.post(`/api/sessions/${session.sessionId}/pause`).catch(() => undefined);
   }, [session, phase, meta.env, context]);
@@ -273,6 +293,7 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
       const r = await api.post(`/api/sessions/${session.sessionId}/resume`);
       if (local.current) local.current.start += performance.now() - pausedAt.current;
       pausedAt.current = null;
+      music.resume();
       if (r?.view) setView(r.view);
       setVersion((v) => v + 1);
       setPaused(false);
@@ -320,6 +341,7 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
         {pausable && <button className="btn btn-ghost icon-btn" onClick={() => pause()} aria-label="Pause game" data-testid="pause"><Icon name="pause" /></button>}
         {session?.mode === 'replay' && phase === 'playing' && <button className="btn btn-sm btn-ghost" onClick={() => { if (confirm('Finish this run now and submit your score?')) { const end = END_ACTION[gameId] ?? { end: true }; if (!record(end)) submit(); } }} data-testid="finish-run"><Icon name="flag" size={14} />Finish</button>}
         {meta.env === 'family' && context === 'solo' && (phase === 'playing' || phase === 'done') && <button className="btn btn-ghost icon-btn" onClick={() => setConfirmRestart(true)} aria-label="Restart game" data-testid="restart"><Icon name="refresh" /></button>}
+        <MusicToggle />
         <button className="btn btn-ghost icon-btn" onClick={() => setTutorialOpen(true)} aria-label="How to play"><Icon name="info" /></button>
       </div>
       <div className="stage-body">
@@ -370,8 +392,16 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
 }
 
 /** Live room host: the server engine runs in the room; the component plays through the same Ctl contract. */
+/** In-game music on/off (remembered on this device). */
+export function MusicToggle() {
+  const [on, setOn] = useState(prefs.musicOn);
+  useEffect(() => { const off = onPrefs(() => setOn(prefs.musicOn)); return () => { off(); }; }, []);
+  return <button className="btn btn-ghost icon-btn" onClick={() => setPref('musicOn', !on)} aria-label={on ? 'Turn music off' : 'Turn music on'} aria-pressed={on} data-testid="music-toggle"><Icon name={on ? 'music' : 'music-off'} /></button>;
+}
+
 export function RoomGame({ gameId, view, version, me, room }: { gameId: string; view: any; version: number; me: string; room: RoomCtx }) {
   const meta = BY_ID[gameId];
+  useEffect(() => { if (room.status === 'playing') music.play(gameId, { intensity: 0.8 }); }, [gameId, room.status]);
   const Comp = COMPONENTS[gameId];
   const ctl: Ctl = useMemo(() => ({
     meta, mode: 'server', view, version, me, difficulty: 'normal',
@@ -386,6 +416,9 @@ export function Hud({ items }: { items: [string, ReactNode][] }) {
   return <div className="hud">{items.map(([k, v]) => <div key={k} className="stat"><b>{v}</b><span>{k}</span></div>)}</div>;
 }
 export function TimeBar({ frac }: { frac: number }) {
+  // Hurry-up: the soundtrack tightens (double-time hats, fills, slightly faster) in the last 20%.
+  const hurry = frac > 0 && frac < 0.2;
+  useEffect(() => { music.setUrgency(hurry ? 1 : 0); return () => music.setUrgency(0); }, [hurry]);
   return <div className="timebar" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(frac * 100)}><i style={{ width: `${Math.max(0, Math.min(1, frac)) * 100}%` }} /></div>;
 }
 /** Re-render on every animation frame while active. Returns ms elapsed (replay clock). */

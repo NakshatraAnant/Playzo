@@ -10,7 +10,7 @@ export default function ThreeCardPoker() {
   const [pp, setPp] = useState(0);
   const act = (a: any) => { sfx.deal(); ctl.act(a).catch(() => undefined); };
   const prev = useRef(v.outcome);
-  useEffect(() => { if (v.outcome && v.outcome !== prev.current) /win|qualify/i.test(v.outcome.result) ? sfx.win() : v.outcome.result === 'Push' ? sfx.coin() : sfx.lose(); prev.current = v.outcome; }, [v.outcome]);
+  useEffect(() => { if (v.outcome && v.outcome !== prev.current) /win|qualify/i.test(v.outcome.result) ? sfx.win() : v.outcome.result === 'Push' ? sfx.neutral() : sfx.lose(); prev.current = v.outcome; }, [v.outcome]);
   return (
     <>
       <div className="felt" style={{ ['--felt' as any]: '#0b3a24', width: '100%', maxWidth: 720, display: 'grid', gap: 18, justifyItems: 'center', minHeight: 320 }}>

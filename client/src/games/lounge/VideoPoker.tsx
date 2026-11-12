@@ -12,7 +12,7 @@ export default function VideoPoker() {
   const [hold, setHold] = useState([false, false, false, false, false]);
   useEffect(() => { if (v.phase === 'hold') setHold([false, false, false, false, false]); }, [v.phase, v.hand.join()]); // eslint-disable-line react-hooks/exhaustive-deps
   const deal = () => { sfx.deal(); ctl.act({ type: 'deal', coins }).catch(() => undefined); };
-  const draw = async () => { sfx.deal(); try { const r = await ctl.act({ type: 'draw', hold }); r.view.result.ret ? sfx.win() : sfx.lose(); } catch { /* toast */ } };
+  const draw = async () => { sfx.deal(); try { const r = await ctl.act({ type: 'draw', hold }); r.view.result.ret > r.view.coins * 10 ? sfx.win() : r.view.result.ret ? sfx.neutral() : sfx.lose(); } catch { /* toast */ } };
   const name = v.phase === 'done' ? v.result?.name : v.current;
   return (
     <>

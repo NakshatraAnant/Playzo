@@ -11,7 +11,7 @@ export default function DragonTiger() {
   const L = v.last;
   const deal = async () => {
     sfx.deal();
-    try { const r = await ctl.act({ type: 'deal', bets }); const w = r.view.last.winner; bets[w] ? sfx.win() : w === 'tie' && (bets.dragon || bets.tiger) ? sfx.coin() : sfx.lose(); } catch { /* toast */ }
+    try { const r = await ctl.act({ type: 'deal', bets }); const w = r.view.last.winner; bets[w] ? sfx.win() : w === 'tie' && (bets.dragon || bets.tiger) ? sfx.neutral() : sfx.lose(); } catch { /* toast */ }
   };
   const spot = (k: string, label: string, sub: string, col: string) => (
     <button onClick={() => { setBets({ ...bets, [k]: Math.min(5000, (bets[k] ?? 0) + chip) }); sfx.deal(); }} style={{ minHeight: 90, borderRadius: 16, border: `2px solid ${col}`, background: `color-mix(in srgb, ${col} 22%, transparent)`, color: '#fff', cursor: 'pointer', fontFamily: 'var(--font-display)', fontWeight: 800 }}>

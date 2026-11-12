@@ -6,12 +6,25 @@ import { useStore } from '../lib/store';
 import { setMuted as setAudioMuted, sfx } from '../lib/sound';
 import { trackEvent } from '../lib/api';
 import { NotificationBell, BreakReminder } from '../pages/Engage';
+import { music } from '../lib/music';
+import { prefs, onPrefs } from '../lib/sound';
 
 export function Shell() {
   const { me, muted, setMuted } = useStore();
   const loc = useLocation();
   const inGame = /^\/(play|lounge\/play|room)\//.test(loc.pathname);
   useEffect(() => { window.scrollTo(0, 0); trackEvent('page_view', { path: loc.pathname.replace(/\/[A-Za-z0-9_-]{12,}$/, '/:id'), source: new URLSearchParams(loc.search).get('utm_source') ?? undefined }); }, [loc.pathname, loc.search]);
+  // Optional hub theme between games (off by default; Settings → Sound).
+  useEffect(() => {
+    const sync = () => {
+      if (inGame) return;
+      if (prefs.menuMusic) music.play('hub', { intensity: 0.45, style: 'hub' });
+      else if (music.state().gameId === 'hub') music.stop(0.8);
+    };
+    sync();
+    const off = onPrefs(sync);
+    return () => { off(); };
+  }, [inGame, loc.pathname]);
   const toggleSound = () => { const m = !muted; setMuted(m); setAudioMuted(m); if (!m) sfx.select(); };
   const nav = [
     { to: '/', icon: 'home', label: 'Home' },

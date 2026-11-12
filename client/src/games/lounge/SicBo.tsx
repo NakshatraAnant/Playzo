@@ -25,7 +25,7 @@ export default function SicBo() {
       const r = await ctl.act({ type: 'roll', bets });
       setRolling((x) => x + 1);
       const won = r.view.last.bets.reduce((t: number, b: any) => t + b.won, 0), st = bets.reduce((t, b) => t + b.amount, 0);
-      setTimeout(() => { setOut(`${r.view.last.dice.join(' · ')} = ${r.view.last.dice.reduce((a: number, b: number) => a + b, 0)} · returned ${won} of ${st}`); won > st ? sfx.win() : won ? sfx.coin() : sfx.lose(); }, 1300);
+      setTimeout(() => { setOut(`${r.view.last.dice.join(' · ')} = ${r.view.last.dice.reduce((a: number, b: number) => a + b, 0)} · returned ${won} of ${st}`); won > st ? sfx.win() : won ? sfx.neutral() : sfx.lose(); }, 1300);
       setBets([]);
     } catch { /* toast */ }
   };

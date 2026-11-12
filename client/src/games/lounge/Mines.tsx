@@ -13,7 +13,7 @@ export default function Mines() {
   const act = async (a: any) => {
     try {
       const r = await ctl.act(a);
-      if (a.type === 'reveal') r.view.boom !== null ? sfx.lose() : sfx.coin();
+      if (a.type === 'reveal') r.view.boom !== null ? sfx.lose() : sfx.good();
       if (a.type === 'bank' || r.view.banked) sfx.win();
     } catch { /* toast */ }
   };

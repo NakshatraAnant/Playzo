@@ -9,7 +9,7 @@ export default function BlackjackDuel() {
   const [stake, setStake] = useStake('duel');
   const act = (type: string, extra: object = {}) => { sfx.deal(); ctl.act({ type, ...extra }).catch(() => undefined); };
   const prev = useRef(v.outcome);
-  useEffect(() => { if (v.outcome && v.outcome !== prev.current) /Win|busts|Natural/.test(v.outcome) ? sfx.win() : /push/i.test(v.outcome) ? sfx.coin() : sfx.lose(); prev.current = v.outcome; }, [v.outcome]);
+  useEffect(() => { if (v.outcome && v.outcome !== prev.current) /Win|busts|Natural/.test(v.outcome) ? sfx.win() : /push/i.test(v.outcome) ? sfx.neutral() : sfx.lose(); prev.current = v.outcome; }, [v.outcome]);
   return (
     <>
       <div className="felt" style={{ ['--felt' as any]: '#06343a', width: '100%', maxWidth: 720, display: 'grid', gap: 18, justifyItems: 'center', minHeight: 330 }}>

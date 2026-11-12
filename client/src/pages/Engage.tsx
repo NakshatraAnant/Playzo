@@ -6,7 +6,9 @@ import { useAsync, useStore } from '../lib/store';
 import { Avatar, Chip, Empty, useTitle } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { BY_ID } from '@shared/catalogue';
-import { sfx } from '../lib/sound';
+import { sfx, prefs, setPref, onPrefs, stinger } from '../lib/sound';
+import { music } from '../lib/music';
+import { STYLES } from '../lib/musicTheory';
 
 const ago = (iso: string) => {
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
@@ -229,4 +231,34 @@ export function BreakReminder() {
     return () => clearTimeout(id);
   }, [data?.prefs?.reminder, data?.prefs?.playReminderMin, toast]);
   return null;
+}
+
+/* ---------------- settings: sound and music ---------------- */
+export function SoundSettings() {
+  const [p, setP] = useState({ ...prefs });
+  useEffect(() => { const off = onPrefs(() => setP({ ...prefs })); return () => { off(); }; }, []);
+  const [preview, setPreview] = useState<string | null>(null);
+  useEffect(() => () => { if (preview) music.stop(0.4); }, [preview]);
+  const demo = (id: string) => {
+    if (preview === id) { music.stop(0.5); setPreview(null); return; }
+    music.play(`preview-${id}`, { intensity: 1, style: id }); setPreview(id);
+  };
+  return (
+    <div className="panel" id="sound">
+      <div className="panel-title"><Icon name="music" /><h3>Sound and music</h3></div>
+      <div className="col" style={{ gap: 10 }}>
+        <label className="check"><input type="checkbox" checked={p.musicOn} onChange={(e) => setPref('musicOn', e.target.checked)} />Music in games</label>
+        <label className="row" style={{ gap: 10, fontSize: 14 }}><span className="muted" style={{ minWidth: 110 }}>Music volume</span><input type="range" min={0} max={1} step={0.05} value={p.musicVol} onChange={(e) => setPref('musicVol', Number(e.target.value))} aria-label="Music volume" style={{ flex: 1 }} /></label>
+        <label className="row" style={{ gap: 10, fontSize: 14 }}><span className="muted" style={{ minWidth: 110 }}>Effects volume</span><input type="range" min={0} max={1} step={0.05} value={p.sfxVol} onChange={(e) => { setPref('sfxVol', Number(e.target.value)); sfx.select(); }} aria-label="Effects volume" style={{ flex: 1 }} /></label>
+        <label className="check"><input type="checkbox" checked={p.menuMusic} onChange={(e) => setPref('menuMusic', e.target.checked)} />Play the PLAYZO theme while browsing</label>
+        <div>
+          <p className="dim" style={{ fontSize: 13, marginBottom: 6 }}>Every game has its own original soundtrack, composed live on your device. It builds up as you play, speeds up when the clock runs low and softens when you pause. Preview a few styles:</p>
+          <div className="row wrap" style={{ gap: 6 }}>
+            {['lofi', 'marimba', 'synthwave', 'baroque', 'bhangra', 'world', 'epic'].map((id) => <button key={id} className={`btn btn-sm ${preview === id ? 'btn-primary' : ''}`} onClick={() => demo(id)} aria-pressed={preview === id}><Icon name={preview === id ? 'pause' : 'play'} size={12} />{STYLES[id].label}</button>)}
+            <button className="btn btn-sm btn-ghost" onClick={() => stinger('victory')}>Victory sting</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }

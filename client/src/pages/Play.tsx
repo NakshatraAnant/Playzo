@@ -8,7 +8,8 @@ import { useAsync, useStore } from '../lib/store';
 import { Avatar, Chip, ErrorBox, useTitle, Empty } from '../components/ui';
 import { Icon } from '../components/Icon';
 import { GameCover } from '../art/covers';
-import { sfx } from '../lib/sound';
+import { sfx, stinger } from '../lib/sound';
+import { music } from '../lib/music';
 
 export function Play() {
   const { id = '' } = useParams();
@@ -155,6 +156,21 @@ export function Room() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code]);
+  // Room soundtrack: calm in the waiting room, full arrangement in play, a stinger at the result.
+  const status = room?.status as string | undefined;
+  useEffect(() => {
+    if (!room) return;
+    if (status === 'lobby') music.play(room.gameId, { intensity: 0.3 });
+    else if (status === 'playing') music.play(room.gameId, { intensity: 0.8 });
+    else if (status === 'done') {
+      music.stop(1);
+      const r = room.result;
+      const won = r && (room.teams ? r.teamWinner !== null && room.members.find((m: any) => m.me)?.team === r.teamWinner : r.winner === me?.id);
+      stinger(won ? 'victory' : r && (r.winner || r.teamWinner !== null) ? 'defeat' : 'complete');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status, room?.gameId]);
+  useEffect(() => () => music.stop(0.6), []);
   const send = (m: any) => ws.current?.readyState === 1 && ws.current.send(JSON.stringify(m));
   if (err) return <ErrorBox message={err} retry={() => nav('/rooms')} />;
   if (!room || !me) return <div className="center" style={{ minHeight: '40vh' }}><div className="spinner" /><p className="dim">Connecting to room {code}…</p></div>;

@@ -52,7 +52,7 @@ export default function Roulette() {
       const won = r.view.last.bets.reduce((t: number, b: any) => t + b.won, 0);
       const staked = use.reduce((t, b) => t + b.amount, 0);
       setOutcome({ t: `${label(pocket)} ${pocket === 0 || pocket === 37 ? 'green' : RED.has(pocket) ? 'red' : 'black'} · returned ${won.toLocaleString()} of ${staked.toLocaleString()}`, good: won > staked ? true : won === 0 ? false : null });
-      won > staked ? sfx.win() : won ? sfx.coin() : sfx.lose();
+      won > staked ? sfx.win() : won ? sfx.neutral() : sfx.lose();
       setLastBets(use);
       setBets([]);
     } catch { /* toast */ } finally { setSpinning(false); }

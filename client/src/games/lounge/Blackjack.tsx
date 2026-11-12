@@ -13,7 +13,7 @@ export default function Blackjack() {
   useEffect(() => {
     if (prev.current === 'player' && v.phase === 'done' || (prev.current !== 'player' && v.phase === 'done' && v.lastResult)) {
       const r: string[] = v.lastResult ?? [];
-      r.some((x) => /Win|Blackjack/.test(x)) ? sfx.win() : r.every((x) => x === 'Push') ? sfx.coin() : sfx.lose();
+      r.some((x) => /Win|Blackjack/.test(x)) ? sfx.win() : r.every((x) => x === 'Push') ? sfx.neutral() : sfx.lose();
     }
     prev.current = v.phase;
   }, [v.phase, v.lastResult]);

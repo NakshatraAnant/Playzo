@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { SecuritySettings } from './Engage';
+import { SecuritySettings, SoundSettings } from './Engage';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, trackEvent } from '../lib/api';
 import { useAsync, useStore } from '../lib/store';
@@ -219,6 +219,7 @@ export function Settings() {
           <button className="btn" onClick={async () => { await api.post('/api/auth/logout'); setMe(null); nav('/'); refresh(); }}><Icon name="logout" />Sign out</button>
         </div>
       </div>
+      <SoundSettings />
       <SecuritySettings />
       <div className="panel">
         <div className="panel-title"><Icon name="shield" /><h3>Privacy</h3></div>

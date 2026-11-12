@@ -23,7 +23,7 @@ export default function Plinko() {
       const r = await ctl.act({ type: 'drop', rows, risk, amount: stake });
       const L = r.view.last;
       setBalls((b) => [...b.slice(-8), { id: Date.now() + Math.random(), path: L.path, t0: performance.now(), slot: L.slot }]);
-      setTimeout(() => { setHot(L.slot); L.mult >= 1 ? sfx.coin() : sfx.thud(); setTimeout(() => setHot(null), 600); }, rows * STEP);
+      setTimeout(() => { setHot(L.slot); L.mult > 1 ? sfx.coin() : L.mult === 1 ? sfx.neutral() : sfx.thud(); setTimeout(() => setHot(null), 600); }, rows * STEP);
     } catch { /* toast */ }
   };
   useEffect(() => {
