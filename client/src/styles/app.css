@@ -170,8 +170,9 @@ p { margin: 0; }
 .check { display: flex; gap: var(--s-3); align-items: flex-start; font-size: var(--fs-sm); color: var(--text-2); cursor: pointer; }
 .check input { width: 20px; height: 20px; accent-color: var(--zo-magenta); margin-top: 1px; flex: none; }
 .form-error { color: #ffb3c1; background: rgba(255, 77, 109, 0.1); border: 1px solid rgba(255, 77, 109, 0.3); padding: 10px 12px; border-radius: var(--r-sm); font-size: var(--fs-sm); }
-.seg { display: inline-flex; padding: 4px; gap: 4px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--line); border-radius: var(--r-pill); }
-.seg button { border: 0; background: transparent; padding: 7px 14px; border-radius: var(--r-pill); font-weight: 700; font-size: var(--fs-sm); color: var(--text-2); cursor: pointer; min-height: 34px; }
+.seg { display: inline-flex; max-width: 100%; overflow-x: auto; scrollbar-width: none; padding: 4px; gap: 4px; background: rgba(0, 0, 0, 0.3); border: 1px solid var(--line); border-radius: var(--r-pill); }
+.seg::-webkit-scrollbar { display: none; }
+.seg button { flex: none; white-space: nowrap; border: 0; background: transparent; padding: 7px 14px; border-radius: var(--r-pill); font-weight: 700; font-size: var(--fs-sm); color: var(--text-2); cursor: pointer; min-height: 34px; }
 .seg button.on { background: var(--surface-3); color: var(--text); box-shadow: var(--sh-1); }
 .search { position: relative; }
 .search svg { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--text-3); }

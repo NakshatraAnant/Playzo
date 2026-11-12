@@ -48,11 +48,11 @@ export function Me() {
             {data.stats.length ? <div className="table-wrap"><table className="data"><thead><tr><th>Game</th><th>Plays</th><th>Wins</th><th>Best</th><th>Mastery</th></tr></thead><tbody>{data.stats.map((s: any) => <tr key={s.game_id}><td><Link to={`/games/${s.game_id}`}>{BY_ID[s.game_id]?.title}</Link></td><td>{s.plays}</td><td>{s.wins}</td><td className="mono">{s.best_score.toLocaleString()}</td><td>{Math.min(10, Math.floor(s.mastery_xp / 50) + 1)}/10</td></tr>)}</tbody></table></div> : <p className="dim">Play a game to start your stats.</p>}
           </section>
           <section className="row wrap" style={{ alignItems: 'stretch', gap: 16 }}>
-            <div className="panel" style={{ flex: '1 1 320px' }}>
+            <div className="panel" style={{ flex: '1 1 min(320px, 100%)', minWidth: 0 }}>
               <div className="panel-title"><Icon name="clock" /><h3>Recent games</h3></div>
               {data.games.slice(0, 12).map((g: any) => <div key={g.id} className="row" style={{ gap: 8, fontSize: 14, padding: '3px 0' }}><span style={{ flex: 1 }}>{BY_ID[g.game_id]?.title}</span><span className="dim">{g.context}</span><Chip tone={g.status === 'completed' ? 'ok' : g.status === 'rejected' ? 'bad' : undefined}>{g.status === 'completed' ? g.score?.toLocaleString() : g.status}</Chip></div>)}
             </div>
-            <div className="panel" style={{ flex: '1 1 320px' }}>
+            <div className="panel" style={{ flex: '1 1 min(320px, 100%)', minWidth: 0 }}>
               <div className="panel-title"><Icon name="swords" /><h3>Match history</h3></div>
               {data.matches.length ? data.matches.map((m: any) => <div key={m.id} className="row" style={{ gap: 8, fontSize: 14, padding: '3px 0' }}><span style={{ flex: 1 }}>{BY_ID[m.game_id]?.title}</span><span className="dim">{m.format}</span><Chip tone={m.outcome === 'win' ? 'ok' : m.outcome === 'loss' ? 'bad' : undefined}>{m.outcome}</Chip></div>) : <p className="dim">No multiplayer matches yet. <Link to="/rooms" style={{ color: 'var(--zo-cyan)' }}>Find a room</Link></p>}
             </div>

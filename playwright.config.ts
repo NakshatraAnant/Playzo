@@ -16,10 +16,10 @@ const WEB = 5767, API = 5768;
 
 export default defineConfig({
   testDir: 'e2e',
-  timeout: 90_000,
+  timeout: 120_000,
   expect: { timeout: 10_000 },
   fullyParallel: false,
-  workers: 2,
+  workers: 1, // one browser at a time: parallel workers plus the dev servers overload a laptop CPU and cause timeouts
   retries: 0,
   reporter: [['list'], ['json', { outputFile: 'docs/e2e-results.json' }]],
   use: { baseURL: `http://localhost:${WEB}`, channel, trace: 'retain-on-failure', screenshot: 'only-on-failure', serviceWorkers: 'block' },

@@ -24,13 +24,13 @@ export default function FactOrFiction() {
     <>
       <Hud items={[['Card', `${Math.min(v.idx + 1, v.total)}/${v.total}`], ['Score', v.score], ['Streak', v.streak]]} />
       {v.last && (
-        <motion.div key={v.idx} initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="panel panel-tight" style={{ maxWidth: 520, width: '100%', borderColor: v.last.correct ? 'var(--ok)' : 'var(--bad)' }} aria-live="polite">
+        <motion.div key={`fb-${v.idx}`} initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} className="panel panel-tight" style={{ maxWidth: 520, width: '100%', borderColor: v.last.correct ? 'var(--ok)' : 'var(--bad)' }} aria-live="polite">
           <b style={{ color: v.last.correct ? 'var(--ok)' : 'var(--bad)' }}>{v.last.correct ? 'Correct!' : 'Not quite.'} It's {v.last.fact ? 'FACT' : 'FICTION'}.</b>
           <p className="muted" style={{ fontSize: 14, marginTop: 4 }}>{v.last.why}</p>
         </motion.div>
       )}
       {v.statement && (
-        <motion.div key={v.idx} drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.9} onDragEnd={onEnd} style={{ x, rotate: rot, width: '100%', maxWidth: 420, touchAction: 'pan-y', cursor: 'grab' }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+        <motion.div key={`card-${v.idx}`} drag="x" dragConstraints={{ left: 0, right: 0 }} dragElastic={0.9} onDragEnd={onEnd} style={{ x, rotate: rot, width: '100%', maxWidth: 420, touchAction: 'pan-y', cursor: 'grab' }} initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
           <div className="panel center" style={{ minHeight: 260, textAlign: 'center', position: 'relative', background: 'linear-gradient(160deg, #24345e, #111a33)', border: '1px solid var(--line-2)' }}>
             <motion.span style={{ opacity: factO, position: 'absolute', top: 16, left: 16 }} className="chip ok">FACT</motion.span>
             <motion.span style={{ opacity: fictO, position: 'absolute', top: 16, right: 16 }} className="chip bad">FICTION</motion.span>

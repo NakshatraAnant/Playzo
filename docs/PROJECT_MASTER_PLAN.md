@@ -44,3 +44,12 @@ Recovery: a local git repository was initialised with checkpoint commits on `mai
 | 12-13 Local deployment and verification | Done (see DEPLOYMENT_GUIDE.md) |
 
 See EXECUTION_TRACKER.md for requirement-level status, and KNOWN_ISSUES.md for what is not production-ready.
+
+## Final build directive (2026-11-12)
+Scope: take the existing build to a fully tested, locally operational state without bypassing legal, security or platform restrictions. Phase-by-phase status lives in EXECUTION_TRACKER.md; per-feature and per-game status in FEATURE_COMPLETION_MATRIX.md and GAME_COMPLETION_MATRIX.md; security review in SECURITY_AUDIT.md.
+
+Key decisions taken:
+- **Lounge stays an isolated internal QA environment.** Public access needs three server-side keys (master switch, config reference, matching approved legal record); QA preview needs a dev server, the flag and an admin/tester role. The dev attestation is refused for everyone else, so no account can obtain fake age verification.
+- **Persistence without a new database server.** PostgreSQL/Docker are unavailable, so rooms persist in the existing SQLite database (additive migration 002) rather than introducing a destructive migration.
+- **No fake integrations.** Email has a real provider adapter but stays in "outbox" mode without credentials, and the UI says so. OAuth, payments and certified age verification remain BLOCKED.
+- **Browser testing without downloads.** Playwright drives the Edge browser that ships with Windows against an isolated in-memory instance.

@@ -47,11 +47,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => { refresh(); }, [refresh]);
   useEffect(() => { document.documentElement.dataset.theme = me?.theme ?? ''; }, [me?.theme]);
 
+  // One shared in-flight request: concurrent callers (StrictMode double effects, several widgets)
+  // must not each create a guest. If a session already exists server-side, adopt it.
+  const pendingSession = useRef<Promise<Me> | null>(null);
   const ensureSession = useCallback(async () => {
     if (me) return me;
-    const r = await api.post<{ user: Me }>('/api/auth/guest');
-    setMe(r.user);
-    return r.user;
+    if (!pendingSession.current) {
+      pendingSession.current = (async () => {
+        try {
+          const r = await api.post<{ user: Me }>('/api/auth/guest');
+          return r.user;
+        } catch (e: any) {
+          if (e?.code !== 'ALREADY') throw e;
+          const r = await api.get<{ user: Me | null }>('/api/auth/me');
+          if (!r.user) throw e;
+          return r.user;
+        }
+      })().finally(() => { pendingSession.current = null; });
+    }
+    const u = await pendingSession.current;
+    setMe(u);
+    return u;
   }, [me]);
 
   const toast = useCallback((text: string, kind?: Toast['kind']) => {

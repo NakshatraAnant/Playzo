@@ -13,7 +13,7 @@ import { watchErrors, acceptDialogs } from './helpers';
 const REPLAY = ['mind-maze', 'pattern-hunter', 'number-rush', 'logic-lock', 'sequence-master', 'grid-genius', 'block-battle', 'tower-tactics', 'reflex-arena', 'color-dash', 'rhythm-rush', 'obstacle-sprint'];
 const RESIGN = ['chess-blitz', 'connect-five', 'hex-conquest', 'territory-wars'];
 const SERVER_OTHER = ['code-breaker', 'word-duel', 'trivia-clash', 'emoji-decode', 'word-ladder', 'geo-sprint', 'fact-or-fiction', 'memory-duel', 'party-chaos'];
-const SKIP_CONTROLS = /resign|finish|pause|restart|quit|leave|how to play|back|give up|mute|sound|notifications/i;
+const SKIP_CONTROLS = /resign|finish|pause|restart|quit|leave|how to play|back|give up|show a route|mute|sound|notifications/i;
 
 async function openFromDiscovery(page: Page, id: string) {
   await page.goto(`/games/${id}`);
@@ -71,11 +71,16 @@ test.describe('replay-verified family games', () => {
       await expect(page.getByTestId('finish-run')).toBeVisible({ timeout: 15_000 }); // countdown done, run in progress
       await pokeGame(page);
       // Some runs end naturally while playing (e.g. a crash in Obstacle Sprint, a wrong pad in Sequence Master).
-      if (!(await ended(page))) {
+      // A run that just ended shows "Verifying…" briefly; wait until it is either still playing or showing results.
+      const settled = async () => {
+        await expect(page.getByTestId('finish-run').or(page.getByText('Score verified by server replay'))).toBeVisible({ timeout: 15_000 });
+        return page.getByTestId('finish-run').isVisible().catch(() => false);
+      };
+      if (await settled()) {
         expect(await pauseResume(page)).toBe(true);
         await pokeGame(page, 2);
       }
-      if (!(await ended(page))) {
+      if (await settled()) {
         const submit = page.waitForResponse((r) => r.url().includes('/submit'));
         await page.getByTestId('finish-run').click();
         const res = await submit;
@@ -124,7 +129,7 @@ test.describe('server-authoritative word, quiz and party games', () => {
       if (id === 'word-ladder') {
         for (let i = 0; i < 12; i++) {
           if (await page.getByText('Server-authoritative result').isVisible().catch(() => false)) break;
-          const g = page.getByRole('button', { name: /Give up/i });
+          const g = page.getByRole('button', { name: /Show a route|Give up/i });
           if (await g.isVisible().catch(() => false)) await g.click();
           await page.waitForTimeout(250);
         }

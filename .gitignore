@@ -10,3 +10,4 @@ data/backups/
 data/*.local.json
 test-results/
 playwright-report/
+docs/e2e-results.json

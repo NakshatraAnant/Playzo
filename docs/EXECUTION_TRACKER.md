@@ -1,5 +1,28 @@
 # Execution Tracker
 
+## Final build directive (2026-11-12) — phase status
+Checkpoint tag before this work: `checkpoint-pre-final-build`. All commits are local on `main`; nothing pushed.
+
+| Phase | Status | Notes |
+|---|---|---|
+| 1 Repository audit + checkpoint | COMPLETE | Audit findings fixed are listed in SECURITY_AUDIT.md (S-1 … S-11) |
+| 2 Family games | COMPLETE | Pause/resume, restart, Finish control; start-to-finish tests for all 25; browser tests for all 25 (desktop + phone) |
+| 3 Lounge games (internal QA) | COMPLETE (technical) / BLOCKED (legal) | Rule tests for all 25; browser QA round for all 25 with a tester account |
+| 4 Age gates and access control | COMPLETE | Master switch, two-key legal gate, QA roles, verification expiry, fail-closed. Certified provider BLOCKED |
+| 5 Authentication and accounts | COMPLETE / PARTIAL | Lockout, sessions list/revoke, security notices. Email delivery and OAuth BLOCKED on credentials |
+| 6 Multiplayer and persistence | COMPLETE | Rooms persisted in SQLite and restored on restart; Origin check; duplicate-result protection. PostgreSQL not available locally |
+| 7 Gamification, economy, shop | COMPLETE | Daily reward, seasons, referrals (attribution only), content flags, append-only ledger |
+| 8 Admin, email, notifications | COMPLETE | Legal, Rooms, Content, Emails, System tabs; Resend adapter + outbox; inbox + preferences |
+| 9 Visual design / mobile | PARTIAL | New UI follows the existing design system; responsive 360-1920px verified. No new illustration/video assets (no generation tools) |
+| 10 Security, performance, DB hardening | COMPLETE (internal) | Independent pentest not done (KI-17) |
+| 11 Browser QA and regression | COMPLETE | Playwright suite on Edge; see QA_TEST_REPORT.md |
+| 12 Local deployment and final verification | COMPLETE | Restart verified; see QA_TEST_REPORT.md |
+
+### Resume point
+- Run `npm run test:all` to re-verify. Next work items are the BLOCKED rows above (all external) and KNOWN_ISSUES "Recommended next steps".
+
+---
+
 Legend: **Impl** = implemented · **Test** = automated (A), manual browser QA (M), or none (-) · **Issues** = see KNOWN_ISSUES.md (KI-n)
 
 ## Resume point
