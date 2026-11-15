@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `us-roulette` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/roulette.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/Roulette.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ American Roulette
 Table & Wheel
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 A 38-pocket wheel with 0 and 00 on a crimson neon layout. The higher house edge is shown openly beside the table.

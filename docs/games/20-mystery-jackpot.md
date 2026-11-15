@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `mystery-jackpot` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `undefined` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/Slots.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Mystery Jackpot Simulator
 Slots
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 A three-reel slot with a fixed mystery jackpot. It triggers on any spin with a published 1-in-4,000 probability, independent of the reels, balance and history.

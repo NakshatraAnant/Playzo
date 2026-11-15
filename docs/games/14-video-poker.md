@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `video-poker` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/tableCards.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/VideoPoker.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Video Poker
 Card & Social
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 Jacks or Better video poker with the full 9/6 paytable and a retro CRT cabinet.

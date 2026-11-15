@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `blackjack` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/blackjack.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/Blackjack.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Blackjack Classic
 Table & Wheel
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 Six-deck blackjack with dealer standing on soft 17, double on any two cards, one split and blackjack paying 3:2.

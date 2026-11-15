@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `hi-lo` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/instant.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/HiLo.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Hi-Lo Cards
 Instant
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 Predict whether the next card is higher or lower. Each correct call multiplies your stake by a fair-priced multiplier with a 2% edge. Bank whenever you like.

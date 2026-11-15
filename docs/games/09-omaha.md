@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `omaha` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/poker.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/Poker.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Omaha Poker Social
 Card & Social
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 Pot-limit Omaha against computer opponents. You must use exactly two hole cards and three board cards.

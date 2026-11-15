@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `plinko` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/instant.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/Plinko.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Plinko Simulator
 Instant
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 Drop a ball through 8, 12 or 16 rows of pegs. Each peg sends it left or right with equal probability.

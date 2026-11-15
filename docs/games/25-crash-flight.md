@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `crash-flight` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/instant.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/CrashFlight.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Crash Flight Simulator
 Instant
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 A multiplier climbs as your jet gains altitude. Bank before the stall point, which is fixed by the server at take-off.

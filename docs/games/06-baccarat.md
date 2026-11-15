@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `baccarat` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/baccaratSicbo.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/Baccarat.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Baccarat
 Table & Wheel
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 Eight-deck Punto Banco with the full third-card tableau, 5% banker commission and a tie bet paying 8:1.

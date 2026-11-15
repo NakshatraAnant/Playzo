@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `mines` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/instant.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/Mines.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Mines Simulator
 Instant
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 Reveal gems on a 5x5 grid while avoiding hidden mines. Mine positions are committed by hash before you start.

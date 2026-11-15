@@ -52,3 +52,18 @@
 | Indexes on `rooms(status, updated_at)`, `match_players(user_id)`, `matches(created_at)`, `legal_reviews`, `dev_outbox(status, next_attempt_at)`, `notifications`, `season_points` | Query paths used by the app |
 
 PostgreSQL mapping for 002: `TEXT` JSON columns → `jsonb`; triggers → `CREATE RULE`/`BEFORE` triggers raising exceptions; `INSERT OR IGNORE` → `ON CONFLICT DO NOTHING`.
+
+## Migration 003_journey_support.sql (additive)
+| Table / change | Purpose |
+|---|---|
+| `users.preferences` | JSON array of chosen game categories (onboarding step 3, Settings); only used to order recommendations |
+| `support_tickets` (kind, subject, status, priority, assigned_to) | Help requests and complaints; statuses open → in_progress → awaiting_user → resolved → closed; safety tickets get high priority |
+| `support_messages` (ticket_id, author_id, staff, body) | Conversation thread; staff messages are attributed to "PLAYZO Support" in the player view |
+| Indexes on `analytics_events(name, day)`, `game_sessions(started_at)`, `users(created_at)` | Analytics dashboard queries |
+
+## Backup, restore and startup validation
+- Automatic daily backup (`VACUUM INTO`, newest 14 kept) plus Admin → System → Back up now and `npm run backup:db`.
+- **Restore test:** Admin → System → Verify opens a backup read-only, runs `PRAGMA integrity_check` and reads migrations, users, ledger and matches.
+- **Restore:** Admin → System → Restore (type RESTORE) stages `data/restore-request.json`. At the next start the server first saves the current database as `pre-restore-<time>.db`, then swaps in the backup, then runs migrations. Nothing is ever deleted. Tested in `tests/journey.test.ts`.
+- **Startup validation:** `PRAGMA quick_check` on every start; the result is in `/api/health` (`dbCheck`) and logged loudly if not `ok`.
+- **Graceful shutdown:** SIGINT/SIGTERM flush live rooms, checkpoint the WAL and close the database.

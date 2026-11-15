@@ -1,5 +1,5 @@
 /**
- * Lounge (18+) in the browser. Public users never see it. Internal QA: an admin promotes an adult
+ * Lounge (21+) in the browser. Public users never see it. Internal QA: an admin promotes an adult
  * test account to "tester" on this isolated localhost instance (PLAYZO_ADULT_DEV_PREVIEW=true),
  * the tester completes the dev attestation + Lounge terms, and plays one round of each of the
  * 25 simulations through the real UI. Every game shows "NOT LEGALLY APPROVED" banners.
@@ -48,7 +48,7 @@ test.describe('internal QA: all 25 simulations', () => {
     await page.goto('/lounge');
     await expect(page.getByText(/DEVELOPMENT ONLY/)).toBeVisible();
     await page.getByRole('button', { name: /attest|verify/i }).first().click();
-    await page.getByRole('button', { name: /I'm 18\+ and I accept/ }).click();
+    await page.getByRole('button', { name: /I'm 21\+ and I accept/ }).click();
     await expect(page.getByText(/DEV PREVIEW/)).toBeVisible();
     await expect(page.getByText(/NOT LEGALLY APPROVED/)).toBeVisible();
   });

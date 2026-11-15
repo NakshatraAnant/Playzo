@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `blackjack-duel` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/blackjack.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/BlackjackDuel.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Blackjack Duel
 Table & Wheel
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 Head-to-head 21 from one shared shoe. Your rival follows a fixed, published rule: hit below 17, stand on 17 or more. Closest to 21 wins.

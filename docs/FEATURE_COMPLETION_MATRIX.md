@@ -3,6 +3,31 @@
 Statuses: **COMPLETE** (implemented and verified by automated tests), **PARTIAL** (works, with a documented gap), **BLOCKED** (needs an external credential, provider, legal or platform decision), **NOT STARTED**.
 Evidence: `U` unit/engine tests · `I` API integration tests · `W` WebSocket tests · `E` browser (Playwright, Edge) tests · `M` manual check.
 
+## Approved user journey (2026-11-15 brief)
+| Stage | Status | Evidence | Notes |
+|---|---|---|---|
+| 1 Homepage: PLAY NOW / PLAY WITH FRIENDS / EXPLORE GAMES, continue playing, popular (real counts) / staff picks, quick games, play with friends, daily challenge, trending (real counts), 6 category rails, featured event, recently played, Lounge entry for eligible, community numbers | COMPLETE | I (journey.test), E (journey.spec) | Popular/trending appear only when real play data exists; never invented |
+| 2 Date of birth first; under 13 no account; 13-17 family; 18-20 family; 21+ Lounge eligibility | COMPLETE | I, E | Server recomputes age on every request; leap days tested |
+| 3 Guest gameplay without sign-up; natural prompts to save progress | COMPLETE | E | |
+| 4 Registration, login, logout, verification, reset, recovery, username, avatar, profile edit, sessions, deletion, security settings | COMPLETE / BLOCKED | I, E | Email delivery and Google/Apple sign-in blocked on credentials |
+| 5 Personalisation: optional tastes at sign-up, editable in Settings, used for recommendations | COMPLETE | I, E | |
+| 6 Discovery: search, categories, filters, sorting, play time, real player counts, multiplayer badges | COMPLETE | E | |
+| 7 Gameplay: instructions → start → play → pause → results → reward → personal best → achievements → up next → rematch → challenge | COMPLETE | E | |
+| 8 Social: friends, rooms, codes, links, quick match, 1v1, 2v2, races, challenges, history, reconnection, rematch, emoji reactions, block/report | COMPLETE | W, E | |
+| 9 Retention: daily puzzle, missions, achievements, levels, mastery, leaderboards, seasons, cosmetics, stats, return recommendations | COMPLETE | I, E | |
+| 10 Lounge 21+: separate lobby and discovery, server-side access, age checks, admin controls | COMPLETE (technical) / BLOCKED (switched off pending recorded approval) | I, E | See LEGAL_AND_COMPLIANCE_GATES.md |
+
+## Support, analytics, operations
+| Feature | Status | Evidence | Notes |
+|---|---|---|---|
+| Support tickets, complaints, status tracking, replies, admin response workflow | COMPLETE | I, E | |
+| Report tracking for players | COMPLETE | I | |
+| Mission-complete and achievement notifications | COMPLETE | I | |
+| Admin analytics dashboard: DAU/WAU, homepage visits, starts/completions, guest→registration, first-game completion, D1/D7, sessions per user, games per session, rooms, invitation acceptance, challenge completion, game load time, crash-free sessions, support requests; charts and 7/14/30/90-day filter | COMPLETE | I, E | First-party data only |
+| Backup verify (restore test) and staged restore with safety copy | COMPLETE | I | |
+| Startup integrity check, graceful shutdown, error monitoring tab | COMPLETE | I | |
+| Multiplayer load test | COMPLETE | script | 300 concurrent players, 0 errors (QA_TEST_REPORT.md) |
+
 ## Accounts and access
 | Feature | Status | Evidence | Notes |
 |---|---|---|---|

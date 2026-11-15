@@ -54,13 +54,14 @@ test('a 19-year-old sees no Lounge anywhere, even by direct URL or API', async (
 });
 
 test('support: a player opens a ticket, staff reply in Admin, the player sees the reply', async ({ browser }) => {
+  const subject = `Sound stops after pause ${uniq('t')}`;
   const pc = await browser.newContext();
   await registerVia(pc, uniq('needhelp'));
   const page = await pc.newPage();
   const w = watchErrors(page);
   await page.goto('/support');
   await page.getByLabel('Topic').selectOption('bug');
-  await page.getByLabel('Subject').fill('Sound stops after pause');
+  await page.getByLabel('Subject').fill(subject);
   await page.getByLabel('Message').fill('After pausing Number Rush twice the music does not come back.');
   await page.getByRole('button', { name: 'Send request' }).click();
   await expect(page).toHaveURL(/\/support\/t_/);
@@ -71,7 +72,7 @@ test('support: a player opens a ticket, staff reply in Admin, the player sees th
   const admin = await ac.newPage();
   await admin.goto('/admin');
   await admin.getByRole('button', { name: 'Support', exact: true }).click();
-  await admin.getByText('Sound stops after pause').click();
+  await admin.getByText(subject).click();
   await admin.getByLabel('Reply').fill('Thanks! Fixed in the next build.');
   await admin.getByRole('button', { name: /Send reply/ }).click();
   await expect(admin.getByText('Thanks! Fixed in the next build.')).toBeVisible();

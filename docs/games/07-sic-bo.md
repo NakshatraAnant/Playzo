@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `sic-bo` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/baccaratSicbo.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/SicBo.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Sic Bo
 Table & Wheel
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 A three-dice table with small/big, totals, doubles and triples, with 3D dice tumbling in a glass shaker.

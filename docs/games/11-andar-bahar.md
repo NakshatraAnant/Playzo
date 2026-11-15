@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `andar-bahar` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/tableCards.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/AndarBahar.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Andar Bahar
 Card & Social
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 A joker card is revealed and cards are dealt alternately to Andar and Bahar until one matches its rank.

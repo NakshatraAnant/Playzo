@@ -2,7 +2,7 @@
 
 | ID | Severity | Issue | Impact / workaround | Status |
 |---|---|---|---|---|
-| KI-1 | Blocking (Lounge launch) | No Lounge game has legal clearance (gates G1-G8 open) | Public Lounge is OFF by default; internal QA preview only for admin/tester accounts on localhost | BLOCKED (legal) |
+| KI-1 | Blocking (Lounge launch) | No Lounge game has a recorded approval yet (gates G1-G8 open). The 21+ product decision is implemented; the Lounge switch stays off until approval references are recorded | Public Lounge is OFF by default; internal QA preview only for admin/tester accounts on localhost | BLOCKED (legal) |
 | KI-2 | High (production) | No email provider credentials: verification, reset, parental-consent and security emails stay in the local outbox | The Resend adapter is implemented; set `PLAYZO_EMAIL_PROVIDER=resend`, `RESEND_API_KEY`, `PLAYZO_EMAIL_FROM`. The UI says honestly that nothing was emailed | BLOCKED (credentials) |
 | KI-3 | Medium | Google/Apple sign-in not configured | Buttons disabled and labelled; endpoint returns 501 | BLOCKED (credentials) |
 | KI-4 | Medium | Payments are a TEST MODE checkout only | No real money; real payments need legal and commercial approval (G7) | BLOCKED (legal/commercial) |
@@ -23,6 +23,8 @@
 | KI-19 | Info | Browser tests run on Microsoft Edge (Chromium) only; Safari/Firefox and real phones not tested | Install other Playwright browsers when network downloads are acceptable | PARTIAL |
 | KI-21 | Info | Music is synthesised live, not recorded by musicians or produced with sample libraries; quality depends on the device's speakers. Automated tests check the music engine's state and harmony rules, not the audible output | An optional pass with commissioned recorded stems could replace styles later; the engine already supports per-game themes | OPEN |
 | KI-22 | Low | Browsers block audio until the first tap/click on the page, so a game opened directly by URL starts its music on the first interaction | Standard browser autoplay policy | OPEN |
+| KI-23 | Info | Under-13 accounts are closed by default (product decision) because parental-consent emails cannot be delivered without an email provider | Set PLAYZO_ALLOW_UNDER13=true only after email delivery and a verified consent flow are in place | BLOCKED (credentials) |
+| KI-24 | Low | On Windows, more than ~300 simultaneous new connections in the same instant can overflow the OS connection queue | Normal arrival patterns are fine (300 concurrent players tested); use a reverse proxy/load balancer in production | OPEN |
 | KI-20 | Low | Certified age verification provider not integrated | Lounge fails closed: no non-QA adult can be verified | BLOCKED (vendor + legal) |
 
 ## Recommended next steps

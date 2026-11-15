@@ -27,9 +27,19 @@
 | Fairness | Published RTP, HMAC RNG with commit/reveal, statistical tests, identical odds for all players |
 | Responsible play | Daily time limit, 1/7/30-day cool-off, 30-minute reality checks, session net always visible, no near-miss engineering, no loss-chasing prompts |
 
+## Age policy (product-owner decisions, enforced server-side)
+| Age (from date of birth) | Access |
+|---|---|
+| Under 13 | No account (`PLAYZO_ALLOW_UNDER13=false`) until a verified parental-consent flow with real email delivery exists. Guest play of family games stays open (no personal data collected). |
+| 13-17 | Family games, friends and rooms with teen/adult separation, quick match. |
+| 18-20 | Family games. No Lounge: the entry point, pages, APIs and game data are invisible (404/403). |
+| 21+ | Family games, plus eligibility for the PLAYZO Lounge once the gates below are satisfied. |
+
+Date of birth is asked first in onboarding (step 1). The client only displays the result; the server repeats the calculation at registration and on every request.
+
 ## Gate mechanics (enforced server-side)
 1. **Master switch:** `PLAYZO_LOUNGE_ENABLED` (server configuration, default **false**). While off, the Lounge is invisible to every ordinary account: no navigation link, 404 on every Lounge page and API, excluded from sitemap and listings.
-2. **Environment entitlement:** registered adult (DOB re-checked on every request) + adult age verification from a **certified provider** (renewed every 365 days) + Lounge terms consent + no active cool-off.
+2. **Environment entitlement:** registered account aged **21 or over** (product-owner decision, `PLAYZO_LOUNGE_MIN_AGE=21`; age recomputed from the stored date of birth on every request, birthdays and leap days exact) + age assurance from a **certified provider** while `PLAYZO_LOUNGE_REQUIRE_AGE_ASSURANCE=true` (default; renewed every 365 days) + Lounge terms consent + no active cool-off. A self-declared date of birth is shown as "self-declared" everywhere, never as verified.
 3. **Two-key per-game legal gate:** a game is public only when `PLAYZO_LEGAL_APPROVALS` lists it with a reference **and** the latest India-law record in Admin → Legal is `approved` with the same reference. Otherwise the server answers **451**. The admin UI can record reviews but cannot change server configuration.
 4. **Internal QA preview:** `PLAYZO_ADULT_DEV_PREVIEW=true` works only on a non-production server and only for accounts with the `admin` or `tester` role. QA accounts may use the clearly labelled dev attestation; every screen shows "DEV PREVIEW · NOT LEGALLY APPROVED". The flag is ignored in production. Ordinary adults are refused the dev attestation (503), so there is no fake verification success.
 5. **Audit:** role changes, attestation use and refusals, legal records, cool-offs and admin actions are written to the append-only audit log.

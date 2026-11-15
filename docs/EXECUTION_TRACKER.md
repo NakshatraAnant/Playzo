@@ -1,5 +1,24 @@
 # Execution Tracker
 
+## Ultimate brief (2026-11-15) — phase status
+Checkpoint tag: `checkpoint-ultimate-brief`. Local commits only.
+
+| Phase | Status | Notes |
+|---|---|---|
+| 1-2 Inspection, baseline (188 tests, typecheck, build) and gap list | COMPLETE | Baseline verified before changes |
+| 3 Homepage and onboarding journey | COMPLETE | DOB-first 3-step sign-up, new homepage with all sections |
+| 4-5 Family and Lounge game experience | COMPLETE | Up-next recommendation on results; all 50 games re-run in browser tests |
+| 6 Age-based access | COMPLETE | 21+ Lounge, under-13 closed, 18-20 blocked from Lounge everywhere |
+| 7 Accounts | COMPLETE / BLOCKED | Profile name, avatar, tastes; email/OAuth credentials missing |
+| 8 Multiplayer | COMPLETE | Load-tested (300 players) |
+| 9 Gamification and economy | COMPLETE | Progress notifications |
+| 10 Admin, support, notifications | COMPLETE | Support workflow, analytics, errors, backups/restore |
+| 11 Design | COMPLETE (within tools) | New homepage, onboarding, support, analytics UI; procedural art only |
+| 12 Database, reliability, performance | COMPLETE | Migration 003, integrity check, graceful shutdown, async hashing |
+| 13-14 Security, regression, browser/mobile QA | COMPLETE | See QA_TEST_REPORT.md |
+| 15 Local production-style deployment | COMPLETE | `npm run local` on :5757 |
+
+
 ## Final build directive (2026-11-12) — phase status
 Checkpoint tag before this work: `checkpoint-pre-final-build`. All commits are local on `main`; nothing pushed.
 

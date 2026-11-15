@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `teen-patti` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/poker.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/TeenPatti.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Teen Patti Social
 Card & Social
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 Classic three-card Teen Patti against computer opponents, with blind and seen play, chaal, pack and show.

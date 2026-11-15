@@ -21,6 +21,11 @@
 | S-8 | Ledger integrity | Ledger rows could be updated or deleted by any code path | Medium | **Fixed**: database triggers make `ledger` and `audit_log` append-only (rows only disappear through account-deletion cascades). Test: `platform.test.ts` "append-only" |
 | S-9 | Duplicate results | A room finishing twice (e.g. across a restart) could record two matches | Low | **Fixed**: deterministic match id per room start + `INSERT OR IGNORE`; rewards only on first insert |
 | S-10 | Email | UI text claimed reset/verification emails were "on their way" when only stored locally | Low (honesty) | **Fixed**: copy depends on whether a provider is configured; outbox rows are labelled `outbox_only` |
+| S-12 | Availability | Password hashing used synchronous scrypt, blocking every live game and request for ~50 ms per sign-in (found by the load test) | Medium | **Fixed**: async scrypt on the worker pool; startup seeding only uses the sync variant |
+| S-13 | Account discovery | Login skipped hashing for unknown accounts, so response time could reveal whether an account exists | Low | **Fixed**: unknown accounts verify against a dummy hash (constant work) |
+| S-14 | Age gating | Lounge eligibility was 18+ | Policy | **Changed** to 21+ by date of birth on every request; 18-20 get 404/403 on every Lounge route, API and session start (tests: api, journey e2e) |
+| S-15 | Children | Under-13 accounts could be created pending parental email that cannot be delivered locally | Policy | **Changed**: under-13 sign-up refused by default; nothing stored; guest play remains |
+| S-16 | Support | New ticket and admin endpoints | - | Owner-only ticket access (404 for others), staff-only queue (403), audited staff actions, length limits, rate limits |
 | S-11 | Admin | Admin role changes, room closures, score removals, legal records, email retries and content flags | - | All server-side role-checked (`requireRole`) and audited. e2e: every admin endpoint returns 403 for normal users |
 
 ## Attack checklist

@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | Game id | `dice-arena` |
-| Environment | PLAYZO Lounge (18+, legally gated, Fun Chips only) |
+| Environment | PLAYZO Lounge (21+, legally gated, Fun Chips only) |
 | Engine | `server/games/lounge/instant.ts` (mode: **server**, rules v1.0.0) |
 | UI | `client/src/games/lounge/DiceArena.tsx` |
 | Status | Implemented · unit/integration tested · DISABLED pending legal review |
@@ -17,7 +17,7 @@ Dice Arena
 Instant
 
 ## 3. Target age group
-18+ (verified adults only; invisible to minors and guests)
+21+ (verified adults only; invisible to minors and guests)
 
 ## 4. Core concept
 Bet on the total of two six-sided dice: under 7, exactly 7, over 7, or a specific double. The dice are rendered in 3D.

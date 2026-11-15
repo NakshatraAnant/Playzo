@@ -36,11 +36,13 @@ Migrations run automatically when the API starts (`server/migrations/*.sql`, app
 | `npm run build` | Client build + SEO prerender + pre-compression into `dist/` |
 | `npm start` | Production mode: one Node process serving `dist/` + API (dev-only features refused) |
 | `npm run backup:db` | Online database backup (`VACUUM INTO`) to `data/backups/`, keeps the latest 14. Backups also run automatically once a day while the API is running (`PLAYZO_AUTO_BACKUP=false` to disable) |
+| `npm run loadtest [rooms] [moves]` | Multiplayer load test against an isolated in-memory server (default 50 rooms) |
 | `npm run gdd` / `npm run rtp` | Regenerate game docs / print Lounge mathematics |
 
 ## Backup and restore
 - **Backup:** automatic daily while the API runs; on demand with `npm run backup:db` or Admin → System → Back up now (safe while the server runs).
-- **Restore:** stop the server, copy the chosen file from `data/backups/` to `data/playzo.db` (keep the old file aside; delete `data/playzo.db-wal` and `-shm` only after the copy), then start the server. Migrations newer than the backup are applied automatically.
+- **Restore (recommended):** Admin → System → Verify the backup, then Restore (type RESTORE) and restart the server. The current database is saved as `pre-restore-<time>.db` first; migrations newer than the backup are applied automatically.
+- **Restore (manual):** stop the server, copy the backup over `data/playzo.db` (keep the old file aside; delete `data/playzo.db-wal` and `-shm` only after the copy), start the server.
 
 ## Restart behaviour
 Stopping the API (`Ctrl+C`) flushes every live room to the database. On start, lobby and in-progress rooms are restored; players reconnect automatically (the room page retries for about a minute) and continue with the same board, seed and turn. Rooms older than 3 hours are expired.

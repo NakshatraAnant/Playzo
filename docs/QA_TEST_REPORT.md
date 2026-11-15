@@ -1,11 +1,12 @@
-# QA Test Report (2026-11-12, final build)
+# QA Test Report (2026-11-15, ultimate brief)
 
 ## Summary
 | Check | Result |
 |---|---|
 | TypeScript (`npm run typecheck`) | Clean |
-| Unit, engine, statistical, API, WebSocket and performance tests (`npm test`) | **188 / 188 passing** (10 files) |
-| Browser tests (`npm run test:e2e`, Playwright on Microsoft Edge) | **114 / 114 passing** (latest full run 111/114; the 3 failures — one real pause-over-results bug and two test races — fixed and re-run, plus a 12-game regression run) |
+| Unit, engine, statistical, API, WebSocket, performance and journey tests (`npm test`) | **200 / 200 passing** (11 files) |
+| Browser tests (`npm run test:e2e`, Playwright on Microsoft Edge) | **124 / 124 passing**: full run 98 passed, 2 failed and 24 skipped (a renamed 21+ button label in the Lounge test setup, and a duplicate ticket subject between the desktop and phone runs); both test fixes re-run: 36/36 |
+| Multiplayer load test (`npm run loadtest`) | 300 concurrent players in 150 rooms: **0 errors**, move-to-update latency p50 50 ms, p95 71 ms, p99 74 ms; 200 players: p50 26 ms, p95 42 ms; 100 players: p50 18 ms, p95 25 ms (in-process, localhost; not a production capacity claim) |
 | Production build (`npm run build`) | Clean, no warnings; main bundle 127 KB gzip; 27 prerendered pages |
 | `npm audit` | 0 vulnerabilities |
 | Restart | Stop/start verified: migrations 001+002 applied, 50 engines, Lounge locked, existing database kept, backup written |
@@ -19,9 +20,10 @@
 | `familyComplete.test.ts` | 28 | **All 25 family games played to game over** (simulated server clock for timed games), replay logs re-verified by the server, tampering rejected; all 25 start through HTTP |
 | `loungeRules.test.ts` | 33 | **Individual rule tests for all 25 Lounge games**: valid rounds fully ledgered, invalid actions rejected, stakes above balance refused, hidden information never in the view, reproducible for a fixed seed |
 | `fairness.test.ts` | 25 | Monte Carlo vs published RTP (z-tests), chi-square uniformity, exact slot RTP, crash distribution, outcome independence from balance |
-| `api.test.ts` | 22 | Auth, CSRF, guest upgrade, under-13 flow, sessions, replay verification, Lounge invisibility, **QA-role preview, two-key legal gate, verification expiry**, cool-off, ledger, shop, social safety, admin RBAC, deletion, SEO |
+| `api.test.ts` | 25 | Auth, CSRF, guest upgrade, under-13 flow, sessions, replay verification, Lounge invisibility, **QA-role preview, two-key legal gate, verification expiry**, cool-off, ledger, shop, social safety, admin RBAC, deletion, SEO |
 | `platform.test.ts` | 15 | Login lockout, session list/revoke, password change signs out other devices, outbox honesty, referrals (no payout), notifications + preferences, daily reward, seasons, pause/resume (deadline shift, paused runs not ranked), append-only ledger/audit log |
 | `multiplayer.test.ts` | 7 | Two real WebSocket clients play to a result; emotes only; race rooms; **rooms restored after a simulated restart with the board intact and exactly one match record**; lobby reconnect; **cross-site WebSocket Origin rejected**; **quick match pairs two players, refuses guests, keeps adults and teens apart** |
+| `journey.test.ts` | 9 | Avatar and tastes at sign-up, taste-driven recommendations, home feed sections with real-only popularity, support ticket workflow and privacy, report tracking, analytics (staff-only, every metric), achievement notifications, backup restore with safety copy, admin-only restore, startup integrity check |
 | `performance.test.ts` | 3 | Chess AI reply time stays within its budget at every level |
 | `music.test.ts` | 9 | Soundtrack for all 50 games, unique deterministic themes, notes in key, adaptive layering, urgency, memory-game caps, calm Lounge audio, no win sounds for partial returns |
 
@@ -35,6 +37,11 @@
 | `multiplayer` | 2 | - | Two browsers: create room → join by code → ready → start → move → emote (exactly one per message) → resign → result in both match histories → rematch; reload mid-match reconnects |
 | `admin` | 2 | - | Every admin tab loads; System tab never shows secrets; legal record cannot open a game; normal users get 403 from every admin endpoint |
 | `music` | 2 | - | Six family games each start their own different theme; pause, in-game toggle and Settings previews control the music |
+
+## New in the ultimate-brief pass
+- `journey.spec` (desktop + phone): homepage CTAs and sections, under-13 refused (UI and API) with guest play, a 19-year-old cannot reach the Lounge by link, URL or API, support ticket round trip with an admin reply, analytics dashboard.
+- `auth.spec`: date-of-birth-first, 3-step sign-up with avatar and tastes.
+- Found by the load test and fixed: password hashing blocked every live game for ~50 ms per sign-in (now asynchronous).
 
 ## Bugs found and fixed in this pass
 1. Lounge QA preview was open to any verified adult (now admin/tester only) and the dev attestation could fake verification (now refused).
