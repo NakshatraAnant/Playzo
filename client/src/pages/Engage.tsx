@@ -9,6 +9,7 @@ import { BY_ID } from '@shared/catalogue';
 import { sfx, prefs, setPref, onPrefs, stinger } from '../lib/sound';
 import { music } from '../lib/music';
 import { STYLES } from '../lib/musicTheory';
+import { PREF_CATEGORIES } from '@shared/preferences';
 
 const ago = (iso: string) => {
   const s = Math.max(0, (Date.now() - Date.parse(iso)) / 1000);
@@ -258,6 +259,33 @@ export function SoundSettings() {
             <button className="btn btn-sm btn-ghost" onClick={() => stinger('victory')}>Victory sting</button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------------- settings: profile and game tastes ---------------- */
+export function ProfileSettings() {
+  const { me, setMe, toast } = useStore();
+  const [name, setName] = useState(me?.displayName ?? '');
+  const [tastes, setTastes] = useState<string[]>(me?.preferences ?? []);
+  if (!me || me.isGuest) return null;
+  const save = async (body: object, msg: string) => { try { const r = await api.patch('/api/auth/profile', body); setMe(r.user); toast(msg, 'ok'); } catch (e: any) { toast(e.message, 'bad'); } };
+  const toggle = (k: string) => { const next = tastes.includes(k) ? tastes.filter((x) => x !== k) : [...tastes, k]; setTastes(next); save({ preferences: next }, 'Recommendations updated'); };
+  return (
+    <div className="panel" id="tastes">
+      <div className="panel-title"><Icon name="user" /><h3>Profile and game tastes</h3></div>
+      {me.ageBand !== 'child' && (
+        <form className="row wrap" style={{ gap: 8, marginBottom: 12 }} onSubmit={(e) => { e.preventDefault(); save({ displayName: name }, 'Display name saved'); }}>
+          <label className="muted" htmlFor="dn" style={{ fontSize: 14 }}>Display name</label>
+          <input id="dn" className="input" style={{ maxWidth: 220 }} value={name} maxLength={24} onChange={(e) => setName(e.target.value)} />
+          <button className="btn btn-sm" disabled={name.trim().length < 2 || name === me.displayName}>Save</button>
+          <Link className="btn btn-sm btn-ghost" to="/shop">Change avatar</Link>
+        </form>
+      )}
+      <p className="dim" style={{ fontSize: 13, marginBottom: 8 }}>Pick what you enjoy; we use it only to order your recommendations.</p>
+      <div className="taste-grid" role="group" aria-label="Game categories">
+        {PREF_CATEGORIES.map((c) => <button type="button" key={c.key} aria-pressed={tastes.includes(c.key)} className={`taste ${tastes.includes(c.key) ? 'on' : ''}`} onClick={() => toggle(c.key)}><Icon name={c.icon} />{c.label}</button>)}
       </div>
     </div>
   );

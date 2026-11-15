@@ -1,9 +1,10 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { SecuritySettings, SoundSettings } from './Engage';
+import { SecuritySettings, SoundSettings, ProfileSettings } from './Engage';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, trackEvent } from '../lib/api';
 import { useAsync, useStore } from '../lib/store';
-import { Logo, Chip, useTitle, Modal } from '../components/ui';
+import { Logo, Chip, useTitle, Modal, Avatar } from '../components/ui';
+import { PREF_CATEGORIES } from '@shared/preferences';
 import { Icon } from '../components/Icon';
 
 function AuthCard({ title, children, sub }: { title: string; sub?: string; children: React.ReactNode }) {
@@ -65,39 +66,89 @@ export function Login() {
 
 export function Register() {
   useTitle('Create account');
-  const { me, setMe } = useStore();
+  const { me, setMe, ensureSession } = useStore();
   const nav = useNavigate();
-  const [f, setF] = useState({ email: '', username: '', password: '', dob: '', parentEmail: '', acceptTerms: false });
+  const [step, setStep] = useState<'age' | 'account' | 'tastes'>('age');
+  const [f, setF] = useState({ email: '', username: '', password: '', dob: '', parentEmail: '', acceptTerms: false, avatar: 'orb-1' });
+  const [policy, setPolicy] = useState<{ canRegister: boolean; band: string; loungeEligible: boolean; message: string } | null>(null);
+  const [tastes, setTastes] = useState<string[]>([]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const age = f.dob ? Math.floor((Date.now() - Date.parse(f.dob)) / (365.2425 * 86400_000)) : null;
-  const child = age !== null && age < 13;
+  const checkAge = async (e: FormEvent) => {
+    e.preventDefault(); setErr(null); setBusy(true);
+    try {
+      const r = await api.post('/api/auth/age-check', { dob: f.dob });
+      setPolicy(r);
+      trackEvent('onboarding_step', { step: 'age', ok: r.canRegister });
+      if (r.canRegister) setStep('account');
+    } catch (x: any) { setErr(x.message); } finally { setBusy(false); }
+  };
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setErr(null); setBusy(true);
     try {
       const ref = new URLSearchParams(location.search).get('ref') ?? undefined;
-      const r = await api.post('/api/auth/register', { ...f, parentEmail: child ? f.parentEmail : undefined, ref });
+      const r = await api.post('/api/auth/register', { ...f, parentEmail: policy?.band === 'child' ? f.parentEmail : undefined, ref });
       setMe(r.user); trackEvent('onboarding_complete', { band: r.user.ageBand });
-      nav('/welcome');
-    } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+      setStep('tastes');
+    } catch (x: any) { setErr(x.message); } finally { setBusy(false); }
   };
+  const saveTastes = async () => {
+    setBusy(true);
+    try { if (tastes.length) { const r = await api.patch('/api/auth/profile', { preferences: tastes }); setMe(r.user); } trackEvent('onboarding_step', { step: 'tastes', n: tastes.length }); nav('/welcome'); }
+    catch (x: any) { setErr(x.message); } finally { setBusy(false); }
+  };
+  const steps = ['Birthday', 'Account', 'Your games'];
+  const idx = step === 'age' ? 0 : step === 'account' ? 1 : 2;
   return (
-    <AuthCard title={me?.isGuest ? 'Save your progress' : 'Join PLAYZO'} sub={me?.isGuest ? 'Your guest progress, XP and ZO coins carry over.' : 'Free forever. No real-money anything.'}>
-      <form className="col" onSubmit={submit}>
-        {err && <div className="form-error" role="alert">{err}</div>}
-        <div className="field"><label htmlFor="em">Email</label><input id="em" type="email" className="input" autoComplete="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required /></div>
-        <div className="field"><label htmlFor="un">Username</label><input id="un" className="input" autoComplete="username" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value.replace(/[^A-Za-z0-9_]/g, '') })} minLength={3} maxLength={20} required /><span className="hint">Letters, numbers and _ . Don't use your real name.</span></div>
-        <div className="field"><label htmlFor="pw">Password</label><input id="pw" type="password" className="input" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} minLength={8} required /><span className="hint">At least 8 characters.</span></div>
-        <div className="field"><label htmlFor="dob">Date of birth</label><input id="dob" type="date" className="input" value={f.dob} onChange={(e) => setF({ ...f, dob: e.target.value })} required max={new Date().toISOString().slice(0, 10)} /><span className="hint">Used only to give you age-appropriate features. Never shown publicly.</span></div>
-        {child && (
-          <div className="field"><label htmlFor="pe">Parent or guardian email</label><input id="pe" type="email" className="input" value={f.parentEmail} onChange={(e) => setF({ ...f, parentEmail: e.target.value })} required /><span className="hint">Under-13 accounts can play solo straight away. Friends and multiplayer unlock once a parent approves.</span></div>
-        )}
-        <label className="check"><input type="checkbox" checked={f.acceptTerms} onChange={(e) => setF({ ...f, acceptTerms: e.target.checked })} required />I agree to the <Link to="/legal/terms" target="_blank" style={{ color: 'var(--zo-cyan)' }}>Terms</Link> and <Link to="/legal/privacy" target="_blank" style={{ color: 'var(--zo-cyan)' }}>Privacy Policy</Link>.</label>
-        <button className="btn btn-primary btn-lg btn-block" disabled={busy}>Create account</button>
-      </form>
-      <div className="divider" />
-      <OAuthButtons />
-      <p className="dim" style={{ fontSize: 13, marginTop: 12, textAlign: 'center' }}>Have an account? <Link to="/login" style={{ color: 'var(--zo-cyan)' }}>Sign in</Link></p>
+    <AuthCard title={me?.isGuest && step !== 'tastes' ? 'Save your progress' : step === 'tastes' ? 'What do you like to play?' : 'Join PLAYZO'}
+      sub={step === 'tastes' ? 'Pick a few so we can recommend games. You can change this any time in Settings.' : me?.isGuest ? 'Your guest progress, XP and ZO coins carry over.' : 'Your place to play, compete and connect. Free forever.'}>
+      <ol className="stepper" aria-label="Sign-up steps">{steps.map((s, i) => <li key={s} className={i === idx ? 'on' : i < idx ? 'done' : ''} aria-current={i === idx ? 'step' : undefined}><span>{i < idx ? '✓' : i + 1}</span>{s}</li>)}</ol>
+      {err && <div className="form-error" role="alert">{err}</div>}
+      {step === 'age' && (
+        <form className="col" onSubmit={checkAge}>
+          <div className="field"><label htmlFor="dob">Date of birth</label><input id="dob" type="date" className="input" value={f.dob} onChange={(e) => { setF({ ...f, dob: e.target.value }); setPolicy(null); }} required max={new Date().toISOString().slice(0, 10)} autoFocus /><span className="hint">We ask first so you get the right games and features. Never shown publicly.</span></div>
+          {policy && !policy.canRegister && (
+            <div className="panel" role="status" style={{ background: 'rgba(124,77,255,.12)' }}>
+              <p>{policy.message}</p>
+              <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={async () => { await ensureSession(); nav('/games'); }}>Play as a guest</button>
+            </div>
+          )}
+          <button className="btn btn-primary btn-lg btn-block" disabled={busy || !f.dob}>Continue</button>
+        </form>
+      )}
+      {step === 'account' && (
+        <form className="col" onSubmit={submit}>
+          {policy && <p className="muted" style={{ fontSize: 14 }}>{policy.message}</p>}
+          <div className="field"><label htmlFor="em">Email</label><input id="em" type="email" className="input" autoComplete="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required /></div>
+          <div className="field"><label htmlFor="un">Username</label><input id="un" className="input" autoComplete="username" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value.replace(/[^A-Za-z0-9_]/g, '') })} minLength={3} maxLength={20} required /><span className="hint">Letters, numbers and _ . Don't use your real name.</span></div>
+          <div className="field"><label htmlFor="pw">Password</label><input id="pw" type="password" className="input" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} minLength={8} required /><span className="hint">At least 8 characters.</span></div>
+          <div className="field"><span className="label-text">Choose your avatar</span>
+            <div className="row wrap" role="radiogroup" aria-label="Avatar" style={{ gap: 8 }}>
+              {['orb-1', 'orb-2', 'orb-3', 'orb-4', 'orb-5', 'orb-6'].map((a) => (
+                <button type="button" key={a} role="radio" aria-checked={f.avatar === a} aria-label={`Avatar ${a.slice(4)}`} className={`avatar-pick ${f.avatar === a ? 'on' : ''}`} onClick={() => setF({ ...f, avatar: a })}><Avatar id={a} size={44} name={f.username || 'You'} /></button>
+              ))}
+            </div>
+          </div>
+          {policy?.band === 'child' && (
+            <div className="field"><label htmlFor="pe">Parent or guardian email</label><input id="pe" type="email" className="input" value={f.parentEmail} onChange={(e) => setF({ ...f, parentEmail: e.target.value })} required /><span className="hint">Under-13 accounts can play solo straight away. Friends and multiplayer unlock once a parent approves.</span></div>
+          )}
+          <label className="check"><input type="checkbox" checked={f.acceptTerms} onChange={(e) => setF({ ...f, acceptTerms: e.target.checked })} required />I agree to the <Link to="/legal/terms" target="_blank" style={{ color: 'var(--zo-cyan)' }}>Terms</Link> and <Link to="/legal/privacy" target="_blank" style={{ color: 'var(--zo-cyan)' }}>Privacy Policy</Link>.</label>
+          <div className="row"><button type="button" className="btn btn-ghost" onClick={() => setStep('age')}>Back</button><button className="btn btn-primary btn-lg" style={{ flex: 1 }} disabled={busy}>Create account</button></div>
+        </form>
+      )}
+      {step === 'tastes' && (
+        <div className="col">
+          <div className="taste-grid" role="group" aria-label="Game categories">
+            {PREF_CATEGORIES.map((c) => (
+              <button type="button" key={c.key} aria-pressed={tastes.includes(c.key)} className={`taste ${tastes.includes(c.key) ? 'on' : ''}`} onClick={() => setTastes((t) => (t.includes(c.key) ? t.filter((x) => x !== c.key) : [...t, c.key]))}>
+                <Icon name={c.icon} />{c.label}
+              </button>
+            ))}
+          </div>
+          <button className="btn btn-primary btn-lg btn-block" disabled={busy} onClick={saveTastes}>{tastes.length ? 'Save and start playing' : 'Skip for now'}</button>
+        </div>
+      )}
+      {step !== 'tastes' && <><div className="divider" /><OAuthButtons /><p className="dim" style={{ fontSize: 13, marginTop: 12, textAlign: 'center' }}>Have an account? <Link to="/login" style={{ color: 'var(--zo-cyan)' }}>Sign in</Link></p></>}
     </AuthCard>
   );
 }
@@ -219,6 +270,7 @@ export function Settings() {
           <button className="btn" onClick={async () => { await api.post('/api/auth/logout'); setMe(null); nav('/'); refresh(); }}><Icon name="logout" />Sign out</button>
         </div>
       </div>
+      <ProfileSettings />
       <SoundSettings />
       <SecuritySettings />
       <div className="panel">

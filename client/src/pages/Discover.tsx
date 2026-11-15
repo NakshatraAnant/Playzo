@@ -9,36 +9,57 @@ import { GameCover } from '../art/covers';
 import { BY_ID, FAMILY } from '@shared/catalogue';
 import { sfx } from '../lib/sound';
 import { Tutorial } from '../games/runtime';
+import { PREF_CATEGORIES, prefScore } from '@shared/preferences';
 import { SeasonBoard } from './Engage';
 
-const CATS = ['All', 'Brain & Logic', 'Word & Knowledge', 'Strategy', 'Reaction & Party'];
 const FORMAT_LABEL: Record<string, string> = { solo: 'Solo', ai: 'vs Computer', versus: 'Live 1v1', teams: '2v2 Teams', group: 'Group room', race: 'Live race', async: 'Friend challenge', daily: 'Daily puzzle' };
 
 export function Discover() {
-  useTitle('Discover games', 'Browse all 25 original PLAYZO games: puzzles, word games, strategy and party games.');
+  useTitle('Discover games', 'Browse all 25 original PLAYZO games: puzzles, word games, trivia, strategy, arcade and party games.');
   const { me } = useStore();
   const { data, error, loading, reload } = useAsync(() => api.get('/api/games?env=family'), [me?.id]);
-  const [q, setQ] = useState('');
-  const [cat, setCat] = useState('All');
+  const params = new URLSearchParams(location.search);
+  const [q, setQ] = useState(params.get('q') ?? '');
+  const [cat, setCat] = useState(PREF_CATEGORIES.some((c) => c.key === params.get('tag')) ? (params.get('tag') as string) : 'all');
   const [filter, setFilter] = useState<'all' | 'multi' | 'fav' | 'quick' | 'new'>('all');
+  const [sort, setSort] = useState<'recommended' | 'popular' | 'az' | 'short' | 'mine'>('recommended');
   const list = useMemo(() => {
     let g = (data?.games ?? []) as any[];
-    if (cat !== 'All') g = g.filter((x) => x.category === cat);
+    const c = PREF_CATEGORIES.find((x) => x.key === cat);
+    if (c) g = g.filter((x) => (c.games as readonly string[]).includes(x.id));
     if (filter === 'multi') g = g.filter((x) => x.multiplayer);
     if (filter === 'fav') g = g.filter((x) => x.me?.favourite);
-    if (filter === 'quick') g = g.filter((x) => /second|1 min|^1-/.test(x.session));
+    if (filter === 'quick') g = g.filter((x) => (x.minutes ?? 10) <= 3);
     if (filter === 'new') g = g.filter((x) => !x.me?.plays);
     const s = q.trim().toLowerCase();
     if (s) g = g.filter((x) => `${x.title} ${x.tagline} ${x.category} ${x.tags.join(' ')}`.toLowerCase().includes(s));
-    return g;
-  }, [data, q, cat, filter]);
+    const prefs = me?.preferences ?? [];
+    const by: Record<typeof sort, (a: any, b: any) => number> = {
+      recommended: (a, b) => prefScore(b.id, prefs) - prefScore(a.id, prefs) || a.n - b.n,
+      popular: (a, b) => (b.playersWeek ?? 0) - (a.playersWeek ?? 0) || a.n - b.n,
+      az: (a, b) => a.title.localeCompare(b.title),
+      short: (a, b) => (a.minutes ?? 10) - (b.minutes ?? 10),
+      mine: (a, b) => (b.me?.plays ?? 0) - (a.me?.plays ?? 0),
+    };
+    return g.slice().sort(by[sort]);
+  }, [data, q, cat, filter, sort, me?.preferences]);
   return (
     <div className="stack">
       <h1 style={{ fontSize: 'var(--fs-2xl)' }}>Discover</h1>
       <div className="search"><Icon name="search" /><input className="input" value={q} onChange={(e) => setQ(e.target.value)} onBlur={() => q && trackEvent('search', { q: q.slice(0, 40) })} placeholder="Search 25 games" aria-label="Search games" /></div>
-      <div className="row wrap" role="tablist" aria-label="Categories">{CATS.map((c) => <button key={c} role="tab" aria-selected={cat === c} className={`chip ${cat === c ? 'on' : ''}`} style={{ cursor: 'pointer' }} onClick={() => { setCat(c); sfx.tap(); }}>{c}</button>)}</div>
-      <div className="seg" aria-label="Filter">
-        {([['all', 'All'], ['multi', 'Multiplayer'], ['quick', 'Quick'], ['new', 'Not played'], ...(me ? [['fav', 'Favourites']] : [])] as [string, string][]).map(([k, l]) => <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k as any)}>{l}</button>)}
+      <div className="cat-chips" role="tablist" aria-label="Categories">
+        {[{ key: 'all', label: 'All games', icon: 'grid' }, ...PREF_CATEGORIES].map((c) => <button key={c.key} role="tab" aria-selected={cat === c.key} className={`cat-chip ${cat === c.key ? 'on' : ''}`} onClick={() => { setCat(c.key); sfx.tap(); }}><Icon name={c.icon} size={16} />{c.label}</button>)}
+      </div>
+      <div className="row wrap" style={{ gap: 10 }}>
+        <div className="seg" aria-label="Filter">
+          {([['all', 'All'], ['multi', 'Multiplayer'], ['quick', 'Quick'], ['new', 'Not played'], ...(me ? [['fav', 'Favourites']] : [])] as [string, string][]).map(([k, l]) => <button key={k} className={filter === k ? 'on' : ''} onClick={() => setFilter(k as any)} aria-pressed={filter === k}>{l}</button>)}
+        </div>
+        <label className="row" style={{ gap: 6, fontSize: 14 }}><span className="muted">Sort</span>
+          <select className="input" style={{ width: 'auto' }} value={sort} onChange={(e) => setSort(e.target.value as any)} aria-label="Sort games">
+            <option value="recommended">Recommended</option><option value="popular">Most played this week</option><option value="short">Shortest first</option><option value="az">A to Z</option>{me && <option value="mine">Most played by me</option>}
+          </select>
+        </label>
+        <span className="dim" style={{ fontSize: 13 }}>{list.length} game{list.length === 1 ? '' : 's'}</span>
       </div>
       {error && <ErrorBox message={error} retry={reload} />}
       {loading && !data ? <TileSkeletons n={10} /> : list.length ? <div className="grid-games">{list.map((g) => <GameTile key={g.id} g={g} showFav={!!me} />)}</div> : <Empty icon="search" title="No games match">Try another search or category.</Empty>}

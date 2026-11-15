@@ -7,7 +7,7 @@ export interface Me {
   parentalConsent: boolean; adultVerified: boolean; adultVerifyMethod: string | null; premium: boolean; premiumUntil: string | null; privacy: string; allowFriendRequests: boolean;
   balances: { ZO: number; CHIPS?: number }; lounge: { entitled: boolean; reasons: string[]; cooloffUntil: string | null; qaPreview: boolean; visible: boolean };
   social: { canSearchUsers: boolean; canSendFriendRequests: boolean; canJoinPrivateRooms: boolean; canUsePublicMatchmaking: boolean; canPurchase: boolean };
-  loungeDailyLimitMin: number | null;
+  loungeDailyLimitMin: number | null; preferences?: string[];
 }
 interface Providers { google: boolean; apple: boolean; devMode: boolean; email?: boolean }
 interface Toast { id: number; text: string; kind?: 'ok' | 'bad' | 'reward' }

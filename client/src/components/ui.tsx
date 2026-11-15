@@ -26,7 +26,7 @@ export function Chip({ children, tone, icon }: { children: ReactNode; tone?: 'on
   return <span className={`chip ${tone ?? ''}`}>{icon && <Icon name={icon} size={14} />}{children}</span>;
 }
 
-export interface GameCardData { id: string; title: string; category: string; age: string; env: string; multiplayer?: boolean; me?: { plays: number; best: number; favourite: boolean } | null; gate?: string; live?: boolean; tagline?: string }
+export interface GameCardData { id: string; title: string; category: string; age: string; env: string; multiplayer?: boolean; me?: { plays: number; best: number; favourite: boolean } | null; gate?: string; live?: boolean; tagline?: string; minutes?: number; playersWeek?: number }
 
 export function GameTile({ g, to, wide, showFav }: { g: GameCardData; to?: string; wide?: boolean; showFav?: boolean }) {
   const { me, toast } = useStore();
@@ -53,7 +53,8 @@ export function GameTile({ g, to, wide, showFav }: { g: GameCardData; to?: strin
       )}
       <div className="meta">
         <b>{g.title}</b>
-        <span>{g.category}{g.me?.best ? ` · Best ${g.me.best.toLocaleString()}` : ''}</span>
+        <span>{g.category}{g.minutes ? ` · ${g.minutes < 1 ? '<1' : Math.round(g.minutes)} min` : ''}{g.me?.best ? ` · Best ${g.me.best.toLocaleString()}` : ''}</span>
+        {!!g.playersWeek && <span className="players"><i aria-hidden="true" />{g.playersWeek} playing this week</span>}
       </div>
     </Link>
   );

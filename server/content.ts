@@ -10,6 +10,28 @@ import { SeededRng } from '../shared/rng';
 import { CLIENT_EVENTS, track } from './analytics';
 import { loungeMath } from './loungeMath';
 import { loungeMinutesToday } from './sessions';
+import { PREF_CATEGORIES, prefScore } from '../shared/preferences';
+
+/* ---------------- popularity (real play data, cached for 60 s) ---------------- */
+let pop: { at: number; week: Map<string, { plays: number; players: number }>; recent: Map<string, number> } | null = null;
+function popularity() {
+  if (pop && Date.now() - pop.at < 60_000) return pop;
+  const since7 = new Date(Date.now() - 7 * 86400_000).toISOString(), since2 = new Date(Date.now() - 2 * 86400_000).toISOString();
+  const week = new Map(db().all<{ game_id: string; plays: number; players: number }>(
+    'SELECT game_id, COUNT(*) AS plays, COUNT(DISTINCT user_id) AS players FROM game_sessions WHERE started_at >= ? GROUP BY game_id', since7,
+  ).map((r) => [r.game_id, { plays: r.plays, players: r.players }]));
+  const recent = new Map(db().all<{ game_id: string; n: number }>('SELECT game_id, COUNT(*) AS n FROM game_sessions WHERE started_at >= ? GROUP BY game_id', since2).map((r) => [r.game_id, r.n]));
+  pop = { at: Date.now(), week, recent };
+  return pop;
+}
+/** Upper bound of the catalogue's session estimate, in minutes ("45 seconds" → 0.75, "2-10 min" → 10). */
+export function sessionMinutes(g: GameMeta): number {
+  const m = g.session.match(/(\d+)(?:-(\d+))?\s*(min|seconds)/);
+  if (!m) return 10;
+  const hi = Number(m[2] ?? m[1]);
+  return m[3] === 'seconds' ? hi / 60 : hi;
+}
+const DIFFICULTY_LABEL: Record<string, string> = { 'Brain & Logic': 'Adaptive', 'Word & Knowledge': 'Easy to learn', Strategy: 'Deep', 'Reaction & Party': 'Fast' };
 
 function card(g: GameMeta, u: User | null) {
   const e = ENGINES[g.id];
@@ -20,6 +42,11 @@ function card(g: GameMeta, u: User | null) {
     multiplayer: g.formats.some((f) => ['versus', 'teams', 'group', 'race'].includes(f)),
     gate: g.env === 'lounge' ? legalGate(g.id, u).status : undefined,
     me: u ? { plays: stats?.plays ?? 0, best: stats?.best_score ?? 0, wins: stats?.wins ?? 0, favourite: fav } : null,
+    // Real activity only (never invented): distinct players in the last 7 days.
+    playersWeek: g.env === 'family' ? popularity().week.get(g.id)?.players ?? 0 : undefined,
+    minutes: sessionMinutes(g),
+    feel: DIFFICULTY_LABEL[g.category] ?? null,
+    difficulties: g.env === 'family' ? ['easy', 'normal', 'hard'] : null,
   };
 }
 
@@ -88,14 +115,36 @@ export async function contentRoutes(app: FastifyInstance) {
       const catCount: Record<string, number> = {};
       for (const p of played) { const c = BY_ID[p.game_id]?.category; if (c) catCount[c] = (catCount[c] ?? 0) + p.plays; }
       const playedSet = new Set(played.map((p) => p.game_id));
-      recommended = FAMILY.filter((g) => !playedSet.has(g.id)).sort((a, b) => (catCount[b.category] ?? 0) - (catCount[a.category] ?? 0)).slice(0, 6).map((g) => card(g, u));
+      let prefs: string[] = [];
+      try { prefs = JSON.parse((u as any).preferences ?? '[]'); } catch { /* none */ }
+      recommended = FAMILY.filter((g) => !playedSet.has(g.id))
+        .sort((a, b) => prefScore(b.id, prefs) - prefScore(a.id, prefs) || (catCount[b.category] ?? 0) - (catCount[a.category] ?? 0))
+        .slice(0, 6).map((g) => card(g, u));
+      if (!recommended.length) recommended = FAMILY.slice().sort((a, b) => prefScore(b.id, prefs) - prefScore(a.id, prefs)).slice(0, 6).map((g) => card(g, u));
       friendsActivity = db().all(
         `SELECT u.display_name AS name, u.avatar, s.game_id, s.score, s.ended_at FROM game_sessions s JOIN users u ON u.id = s.user_id
          WHERE s.status = 'completed' AND s.env = 'family' AND u.privacy_profile != 'private' AND s.user_id IN (SELECT CASE WHEN user_a = ? THEN user_b ELSE user_a END FROM friendships WHERE (user_a = ? OR user_b = ?) AND status = 'accepted')
          ORDER BY s.ended_at DESC LIMIT 6`, u.id, u.id, u.id,
       );
     } else recommended = FAMILY.slice(0, 6).map((g) => card(g, u));
+    const P = popularity();
+    const byPlays = FAMILY.filter((g) => (P.week.get(g.id)?.plays ?? 0) > 0).sort((a, b) => (P.week.get(b.id)?.plays ?? 0) - (P.week.get(a.id)?.plays ?? 0));
+    const trendingList = FAMILY.filter((g) => (P.recent.get(g.id) ?? 0) > 0).sort((a, b) => (P.recent.get(b.id) ?? 0) - (P.recent.get(a.id) ?? 0));
+    const since7 = new Date(Date.now() - 7 * 86400_000).toISOString();
+    const community = {
+      players: db().get<{ n: number }>('SELECT COUNT(*) AS n FROM users WHERE is_guest = 0 AND status = \'active\'')!.n,
+      gamesThisWeek: db().get<{ n: number }>("SELECT COUNT(*) AS n FROM game_sessions WHERE status = 'completed' AND env = 'family' AND started_at >= ?", since7)!.n,
+      matchesThisWeek: db().get<{ n: number }>('SELECT COUNT(*) AS n FROM matches WHERE created_at >= ?', since7)!.n,
+    };
     return {
+      // Popular/trending come from real play counts; when there is no data yet they are empty and the
+      // client shows clearly-labelled staff picks instead of inventing numbers.
+      popular: byPlays.slice(0, 8).map((g) => card(g, u)),
+      trending: trendingList.slice(0, 8).map((g) => card(g, u)),
+      quick: FAMILY.filter((g) => sessionMinutes(g) <= 3).map((g) => card(g, u)),
+      multiplayer: FAMILY.filter((g) => g.formats.some((f) => ['versus', 'teams', 'group', 'race'].includes(f))).map((g) => card(g, u)),
+      categories: PREF_CATEGORIES.filter((c) => c.key !== 'multiplayer').map((c) => ({ key: c.key, label: c.label, icon: c.icon, games: (c.games as readonly string[]).map((id) => card(BY_ID[id], u)) })),
+      community,
       featured, spotlight: { game: spotlight, week, leaderboard: leaderboard(spotlight.id, 'week', u?.id ?? null, false, 5) },
       daily: { ...dp, game: card(BY_ID[dp.gameId], u), done: dailyDone, leaderboard: leaderboard(dp.gameId, 'daily', u?.id ?? null, false, 5) },
       continuePlaying, recommended, recent, friendsActivity,
