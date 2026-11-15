@@ -5,7 +5,7 @@ import fastifyStatic from '@fastify/static';
 import path from 'node:path';
 import fs from 'node:fs';
 import { config } from './config';
-import { db } from './db';
+import { db, startupCheck } from './db';
 import { HttpError } from './http';
 import { authRoutes } from './auth';
 import { sessionRoutes, reapSessions } from './sessions';
@@ -16,6 +16,7 @@ import { shopRoutes } from './shop';
 import { adminRoutes } from './admin';
 import { notifyRoutes } from './notify';
 import { rewardRoutes } from './rewards';
+import { supportRoutes } from './support';
 import { retryDueEmails, emailStatus } from './email';
 import { startAutoBackups, latestBackup } from './backup';
 import { seoRoutes } from './seo';
@@ -63,7 +64,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
 
   app.get('/api/health', async () => ({
     ok: true, service: 'playzo-api', time: new Date().toISOString(),
-    db: !!db().get('SELECT 1 AS ok'), migrations: db().all('SELECT name FROM schema_migrations').map((r: any) => r.name),
+    db: !!db().get('SELECT 1 AS ok'), dbCheck: startupCheck, migrations: db().all('SELECT name FROM schema_migrations').map((r: any) => r.name),
     engines: Object.keys(ENGINES).length, dictionary: dictionarySize(), devMode: config.devMode, production: config.production,
     uptimeSec: Math.round(process.uptime()), lastBackup: latestBackup() ? new Date(latestBackup()!.at).toISOString() : null, email: emailStatus().provider, emailConfigured: emailStatus().configured, loungeEnabled: config.loungeEnabled,
   }));
@@ -77,6 +78,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(adminRoutes);
   await app.register(notifyRoutes);
   await app.register(rewardRoutes);
+  await app.register(supportRoutes);
 
   app.all('/api/*', async (_req, reply) => reply.code(404).send({ error: 'Not found', code: 'NOT_FOUND' }));
 

@@ -40,6 +40,8 @@ const Lounge = lazy(() => L().then((m) => ({ default: m.Lounge })));
 const LoungeGame = lazy(() => L().then((m) => ({ default: m.LoungeGame })));
 const LoungePlay = lazy(() => L().then((m) => ({ default: m.LoungePlay })));
 const Admin = lazy(() => import('./pages/Admin'));
+const Support = lazy(() => import('./pages/Support').then((m) => ({ default: m.Support })));
+const SupportTicket = lazy(() => import('./pages/Support').then((m) => ({ default: m.SupportTicket })));
 import { Notifications } from './pages/Engage';
 const Legal = lazy(() => import('./pages/Legal'));
 
@@ -85,6 +87,8 @@ const router = createBrowserRouter([
       { path: '/shop', element: <Shop /> },
       { path: '/settings', element: <Settings /> },
       { path: '/notifications', element: <Notifications /> },
+      { path: '/support', element: <Support /> },
+      { path: '/support/:id', element: <SupportTicket /> },
       { path: '/login', element: <Login /> },
       { path: '/register', element: <Register /> },
       { path: '/welcome', element: <Welcome /> },

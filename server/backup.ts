@@ -5,7 +5,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { db } from './db';
+import { db, restoreRequestFile } from './db';
+import { DatabaseSync } from 'node:sqlite';
 import { config } from './config';
 
 export const BACKUP_DIR = path.resolve('data/backups');
@@ -36,3 +37,38 @@ export function startAutoBackups() {
   setTimeout(check, 5_000).unref();
   setInterval(check, 6 * 3600_000).unref();
 }
+
+/** List backups (newest first) with size; never exposes anything outside data/backups. */
+export function listBackups() {
+  if (!fs.existsSync(BACKUP_DIR)) return [];
+  return fs.readdirSync(BACKUP_DIR).filter((f) => /^(playzo|pre-restore)-.*\.db$/.test(f)).sort().reverse()
+    .map((f) => { const st = fs.statSync(path.join(BACKUP_DIR, f)); return { file: f, bytes: st.size, at: new Date(st.mtimeMs).toISOString(), kind: f.startsWith('pre-restore') ? 'safety copy' : 'backup' }; });
+}
+const safeName = (name: string) => {
+  const f = path.basename(String(name));
+  if (!/^(playzo|pre-restore)-[\w-]+\.db$/.test(f) || !fs.existsSync(path.join(BACKUP_DIR, f))) throw new Error('Backup not found');
+  return f;
+};
+/** Restore test: open the backup read-only, run an integrity check and read key tables. */
+export function verifyBackup(name: string) {
+  const f = safeName(name);
+  const d = new DatabaseSync(path.join(BACKUP_DIR, f), { readOnly: true });
+  try {
+    const integrity = (d.prepare('PRAGMA integrity_check').get() as any)?.integrity_check ?? 'unknown';
+    const migrations = (d.prepare('SELECT name FROM schema_migrations ORDER BY name').all() as any[]).map((r) => r.name);
+    const count = (t: string) => { try { return (d.prepare(`SELECT COUNT(*) AS n FROM ${t}`).get() as any).n as number; } catch { return null; } };
+    return { file: f, integrity, migrations, users: count('users'), ledger: count('ledger'), matches: count('matches'), ok: integrity === 'ok' && migrations.length > 0 };
+  } finally { d.close(); }
+}
+/** Stage a restore; it is applied at the next start, after a safety copy of the current database. */
+export function requestRestore(name: string, by: string) {
+  const f = safeName(name);
+  const v = verifyBackup(f);
+  if (!v.ok) throw new Error(`Backup failed verification: ${v.integrity}`);
+  fs.writeFileSync(restoreRequestFile(config.dbPath), JSON.stringify({ file: f, requestedBy: by, at: new Date().toISOString() }));
+  return v;
+}
+export function pendingRestore(): { file: string; at: string } | null {
+  try { return JSON.parse(fs.readFileSync(restoreRequestFile(config.dbPath), 'utf8')); } catch { return null; }
+}
+export function cancelRestore() { try { fs.unlinkSync(restoreRequestFile(config.dbPath)); } catch { /* none */ } }

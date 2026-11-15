@@ -69,6 +69,7 @@ export function Shell() {
           {(me?.role === 'admin' || me?.role === 'support') && <NavLink to="/admin"><Icon name="admin" />Admin</NavLink>}
           <div className="spacer" />
           <NavLink to="/settings"><Icon name="gear" />Settings</NavLink>
+          <NavLink to="/support"><Icon name="mail" />Help & support</NavLink>
           <Link to="/legal/fair-play" className="dim" style={{ fontSize: 12 }}>Fair play · Privacy · Terms</Link>
         </nav>
       )}

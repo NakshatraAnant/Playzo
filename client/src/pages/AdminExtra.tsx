@@ -69,7 +69,7 @@ export function Legal() {
   if (!data) return <div className="spinner" />;
   return (
     <div className="stack">
-      <div className="lounge-banner"><Icon name="lock" />Lounge master switch: <b>{data.loungeEnabled ? 'ON' : 'OFF'}</b> · Internal QA preview: <b>{data.adultDevPreview ? 'ON (admin/tester accounts, localhost only)' : 'OFF'}</b></div>
+      <div className="lounge-banner"><Icon name="lock" />Lounge master switch: <b>{data.loungeEnabled ? 'ON' : 'OFF'}</b> · Internal QA preview: <b>{data.adultDevPreview ? 'ON (admin/tester accounts, localhost only)' : 'OFF'}</b> · Minimum age: <b>{data.loungeMinAge}+</b> (from date of birth) · Age assurance required: <b>{data.requireAgeAssurance ? 'yes' : 'no (self-declared date of birth)'}</b></div>
       <p className="muted" style={{ fontSize: 13 }}>{data.rule}</p>
       <div className="table-wrap"><table className="data"><thead><tr><th>Game</th><th>Public gate</th><th>Config ref</th><th>India law</th><th>Google Play</th><th>App Store</th><th></th></tr></thead><tbody>
         {data.games.map((g: any) => (
@@ -134,12 +134,58 @@ export function System() {
           {Object.entries(data.config).map(([k, v]) => <tr key={k}><td>{k}</td><td className="mono" style={{ fontSize: 12 }}>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</td></tr>)}
           <tr><td>email</td><td className="mono" style={{ fontSize: 12 }}>{data.email.provider} · {data.email.note}</td></tr>
         </tbody></table></div></div>
+      <BackupsPanel />
       <div className="panel"><div className="panel-title"><h3>Database</h3></div>
         <p className="muted" style={{ fontSize: 13 }}>{data.db.path} · migrations: {data.db.migrations.map((m: any) => m.name).join(', ')}</p>
         <p className="muted" style={{ fontSize: 13 }}>Last backup: {data.backup ? `${data.backup.file} (${new Date(data.backup.at).toLocaleString()})` : 'none yet'} · automatic daily backups, newest 14 kept in data/backups</p>
         {me?.role === 'admin' && <button className="btn btn-sm" style={{ marginTop: 8 }} onClick={backup}>Back up now</button>}
         <p className="muted" style={{ fontSize: 13 }}>{Object.entries(data.db.rows).map(([k, v]) => `${k} ${v}`).join(' · ')}</p>
       </div>
+    </div>
+  );
+}
+
+/** Backups: list, restore test (integrity + key tables), staged restore applied at next start. */
+export function BackupsPanel() {
+  const { toast, me } = useStore();
+  const { data, reload } = useAsync(() => (me?.role === 'admin' ? api.get('/api/admin/backups') : Promise.resolve(null)), [me?.role]);
+  const [checks, setChecks] = useState<Record<string, any>>({});
+  if (!data) return null;
+  const verify = async (f: string) => { try { const r = await api.post(`/api/admin/backups/${encodeURIComponent(f)}/verify`); setChecks({ ...checks, [f]: r }); } catch (e: any) { toast(e.message, 'bad'); } };
+  const restore = async (f: string) => {
+    const c = prompt(`Restore ${f}? The current database is saved first and the restore is applied when the server restarts. Type RESTORE to confirm.`);
+    if (c !== 'RESTORE') return;
+    try { const r = await api.post(`/api/admin/backups/${encodeURIComponent(f)}/restore`, { confirm: 'RESTORE' }); toast(r.note, 'ok'); reload(); } catch (e: any) { toast(e.message, 'bad'); }
+  };
+  const cancel = async () => { await api.post('/api/admin/backups/cancel-restore'); toast('Restore cancelled', 'ok'); reload(); };
+  return (
+    <div className="panel">
+      <div className="panel-title"><Icon name="shield" /><h3>Backups and restore</h3></div>
+      {data.pending && <div className="lounge-banner dev" style={{ marginBottom: 10 }}><Icon name="info" />Restore of <b>{data.pending.file}</b> is staged and will be applied at the next server restart. <button className="btn btn-sm" onClick={cancel}>Cancel</button></div>}
+      {data.backups.length ? (
+        <div className="table-wrap"><table className="data"><thead><tr><th>File</th><th>Type</th><th>Size</th><th>Taken</th><th>Restore test</th><th></th></tr></thead><tbody>
+          {data.backups.slice(0, 20).map((b: any) => {
+            const c = checks[b.file];
+            return <tr key={b.file}><td className="mono" style={{ fontSize: 11 }}>{b.file}</td><td>{b.kind}</td><td>{Math.round(b.bytes / 1024)} KB</td><td>{new Date(b.at).toLocaleString()}</td>
+              <td>{c ? <Chip tone={c.ok ? 'ok' : 'bad'}>{c.ok ? `ok · ${c.users} users · ${c.migrations.length} migrations` : c.integrity}</Chip> : <button className="btn btn-sm" onClick={() => verify(b.file)}>Verify</button>}</td>
+              <td><button className="btn btn-sm btn-ghost" onClick={() => restore(b.file)}>Restore…</button></td></tr>;
+          })}
+        </tbody></table></div>
+      ) : <p className="dim">No backups yet.</p>}
+    </div>
+  );
+}
+
+/** Error monitoring: client crashes grouped by message and page. */
+export function Errors() {
+  const { data } = useAsync(() => api.get('/api/admin/errors'), []);
+  if (!data) return <div className="spinner" />;
+  return (
+    <div className="stack">
+      <p className="muted" style={{ fontSize: 13 }}>Errors reported by players' browsers in the last 14 days: {data.perDay.map((d: any) => `${d.day.slice(5)}: ${d.n}`).join(' · ') || 'none'}</p>
+      {data.grouped.length ? <div className="table-wrap"><table className="data"><thead><tr><th>Last seen</th><th>Count</th><th>Where</th><th>Message</th></tr></thead><tbody>
+        {data.grouped.map((e: any, i: number) => <tr key={i}><td>{e.last.slice(0, 16)}</td><td>{e.n}</td><td className="mono" style={{ fontSize: 11 }}>{e.where_}</td><td style={{ fontSize: 12, wordBreak: 'break-word' }}>{e.message}</td></tr>)}
+      </tbody></table></div> : <Empty icon="check" title="No errors reported">Nothing has crashed in players' browsers.</Empty>}
     </div>
   );
 }

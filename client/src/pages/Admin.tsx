@@ -3,9 +3,11 @@ import { api } from '../lib/api';
 import { useAsync, useStore } from '../lib/store';
 import { Chip, Empty, Modal, useTitle } from '../components/ui';
 import { Icon } from '../components/Icon';
-import { Rooms, Content, Legal, Emails, System } from './AdminExtra';
+import { Rooms, Content, Legal, Emails, System, Errors } from './AdminExtra';
+import { SupportAdmin } from './AdminSupport';
+import { Analytics } from './AdminAnalytics';
 
-const TABS = ['Overview', 'Users', 'Reports', 'Games', 'Rooms', 'Content', 'Economy', 'Legal', 'Emails', 'Ads', 'System', 'Compliance', 'Audit'] as const;
+const TABS = ['Overview', 'Analytics', 'Users', 'Support', 'Reports', 'Games', 'Rooms', 'Content', 'Economy', 'Legal', 'Emails', 'Ads', 'System', 'Errors', 'Compliance', 'Audit'] as const;
 
 export default function Admin() {
   useTitle('Admin');
@@ -17,7 +19,9 @@ export default function Admin() {
       <div className="row wrap"><h1 style={{ fontSize: 'var(--fs-2xl)', flex: 1 }}>Admin</h1><Chip tone="on">{me.role}</Chip></div>
       <div className="seg" style={{ flexWrap: 'wrap' }}>{TABS.map((t) => <button key={t} className={tab === t ? 'on' : ''} onClick={() => setTab(t)}>{t}</button>)}</div>
       {tab === 'Overview' && <Overview />}
+      {tab === 'Analytics' && <Analytics />}
       {tab === 'Users' && <Users />}
+      {tab === 'Support' && <SupportAdmin />}
       {tab === 'Reports' && <Reports />}
       {tab === 'Games' && <Games />}
       {tab === 'Rooms' && <Rooms />}
@@ -26,6 +30,7 @@ export default function Admin() {
       {tab === 'Legal' && <Legal />}
       {tab === 'Emails' && <Emails />}
       {tab === 'System' && <System />}
+      {tab === 'Errors' && <Errors />}
       {tab === 'Ads' && <Ads />}
       {tab === 'Compliance' && <Compliance />}
       {tab === 'Audit' && <Audit />}
@@ -91,7 +96,7 @@ function UserDetail({ id, onClose }: { id: string; onClose: () => void }) {
     <Modal open onClose={onClose} title={data?.user?.username ?? 'User'} wide>
       {!data ? <div className="spinner" /> : (
         <div className="stack">
-          <p className="muted" style={{ fontSize: 13 }}>{data.user.id} · {data.user.email ?? 'no email'} · DOB {data.user.dob ?? '-'} · band {data.user.age_band} · adult verification {data.user.adult_verify_method ?? 'none'} · parental consent {data.user.parental_consent_at ? 'yes' : 'no'}</p>
+          <p className="muted" style={{ fontSize: 13 }}>{data.user.id} · {data.user.email ?? 'no email'} · DOB {data.user.dob ?? '-'} · band {data.user.age_band} · adult verification {data.user.adult_verify_method ?? 'none'} · parental consent {data.user.parental_consent_at ? 'yes' : 'no'}{data.age ? ` · age ${data.age.years} (${data.age.source}) · Lounge-eligible by age: ${data.age.loungeEligible ? 'yes' : 'no'}` : ''}</p>
           <p>ZO {data.balances.ZO} · Fun Chips {data.balances.CHIPS}</p>
           <div className="row wrap">
             {data.user.status === 'active' ? <button className="btn btn-danger" onClick={() => act(`/api/admin/users/${id}/status`, { status: 'suspended', reason: 'admin action' })}>Suspend</button> : <button className="btn" onClick={() => act(`/api/admin/users/${id}/status`, { status: 'active' })}>Reactivate</button>}

@@ -2,9 +2,9 @@
 import type { FastifyInstance } from 'fastify';
 import { db, nowIso } from './db';
 import { HttpError, requireRole, audit, str, User } from './http';
-import { overview } from './analytics';
+import { overview, productAnalytics } from './analytics';
 import { CATALOGUE, BY_ID } from '../shared/catalogue';
-import { legalGate, AGE_ASSURANCE_PROVIDERS, latestLegalReview } from './access';
+import { legalGate, AGE_ASSURANCE_PROVIDERS, latestLegalReview, ageOn, loungeAgeOk } from './access';
 import { post, balance } from './economy';
 import { newId } from './secureRng';
 import { config } from './config';
@@ -12,7 +12,7 @@ import { roomCount, roomList, closeRoom } from './rooms';
 import fs from 'node:fs';
 import path from 'node:path';
 import { emailStatus, requeue } from './email';
-import { backupNow, latestBackup } from './backup';
+import { backupNow, latestBackup, listBackups, verifyBackup, requestRestore, pendingRestore, cancelRestore } from './backup';
 import { disabledSet, setEnabled } from './contentFlags';
 import { ACHIEVEMENTS, DAILY_POOL, dailyMissions, weeklyMissions, seasonKey } from './progression';
 import { COSMETICS, COSMETIC_BY_ID } from '../shared/cosmetics';
@@ -23,6 +23,11 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get('/api/admin/overview', async (req) => {
     requireRole(req, STAFF);
     return { ...overview(), liveRooms: roomCount(), ledger: db().get("SELECT COUNT(*) AS txs, COALESCE(SUM(CASE WHEN currency='ZO' AND amount>0 THEN amount END),0) AS zoIssued, COALESCE(SUM(CASE WHEN currency='CHIPS' AND type='grant' THEN amount END),0) AS chipsGranted FROM ledger") };
+  });
+
+  app.get('/api/admin/analytics', async (req) => {
+    requireRole(req, STAFF);
+    return productAnalytics(Number((req.query as any).days ?? 14));
   });
 
   app.get('/api/admin/users', async (req) => {
@@ -44,6 +49,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!u) throw new HttpError(404, 'User not found', 'NOT_FOUND');
     return {
       user: u, balances: { ZO: balance(id, 'ZO'), CHIPS: balance(id, 'CHIPS') },
+      age: (u as any).dob ? { years: ageOn((u as any).dob), loungeEligible: loungeAgeOk(u as any), source: (u as any).adult_verify_method ? (u as any).adult_verify_method : 'self-declared date of birth' } : null,
       ledger: db().all('SELECT * FROM ledger WHERE user_id = ? ORDER BY created_at DESC LIMIT 100', id),
       sessions: db().all('SELECT id, game_id, status, score, context, reject_reason, started_at, ended_at FROM game_sessions WHERE user_id = ? ORDER BY started_at DESC LIMIT 50', id),
       reports: db().all('SELECT * FROM reports WHERE target_user = ? ORDER BY created_at DESC', id),
@@ -159,7 +165,7 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get('/api/admin/legal', async (req) => {
     requireRole(req, STAFF);
     return {
-      loungeEnabled: config.loungeEnabled, adultDevPreview: config.adultDevPreview, production: config.production,
+      loungeEnabled: config.loungeEnabled, adultDevPreview: config.adultDevPreview, production: config.production, loungeMinAge: config.loungeMinAge, requireAgeAssurance: config.loungeRequireAgeAssurance,
       rule: 'A Lounge game is public only when PLAYZO_LOUNGE_ENABLED=true AND PLAYZO_LEGAL_APPROVALS names it AND the latest india_law record is "approved" with the same reference. This dashboard can record reviews but cannot change server configuration.',
       games: CATALOGUE.filter((g) => g.env === 'lounge').map((g) => ({
         id: g.id, title: g.title, gate: legalGate(g.id).status, configRef: config.legalApprovals[g.id] ?? null, latest: latestLegalReview(g.id),
@@ -266,6 +272,7 @@ export async function adminRoutes(app: FastifyInstance) {
       // Non-secret configuration only. Secrets (passwords, API keys) are never returned.
       config: {
         production: config.production, devMode: config.devMode, loungeEnabled: config.loungeEnabled, adultDevPreview: config.adultDevPreview,
+        loungeMinAge: config.loungeMinAge, loungeRequireAgeAssurance: config.loungeRequireAgeAssurance, allowUnder13: config.allowUnder13,
         legalApprovals: Object.keys(config.legalApprovals).length, ageVerificationDays: config.ageVerificationDays, publicUrl: config.publicUrl,
         oauth: { google: !!config.googleClientId, apple: !!config.appleClientId }, payments: 'dev-mock (TEST MODE) only',
         ageAssurance: Object.entries(AGE_ASSURANCE_PROVIDERS).map(([k, v]) => ({ id: k, production: v.production })),
@@ -280,6 +287,39 @@ export async function adminRoutes(app: FastifyInstance) {
     audit(admin.id, 'admin.backup', name);
     return { ok: true, file: name };
   });
+  app.get('/api/admin/backups', async (req) => {
+    requireRole(req, ['admin']);
+    return { backups: listBackups(), pending: pendingRestore() };
+  });
+  app.post('/api/admin/backups/:name/verify', async (req) => {
+    const admin = requireRole(req, ['admin']);
+    try { const v = verifyBackup((req.params as any).name); audit(admin.id, 'admin.backup_verify', v.file, { ok: v.ok }); return v; }
+    catch (e: any) { throw new HttpError(404, e.message, 'NOT_FOUND'); }
+  });
+  app.post('/api/admin/backups/:name/restore', async (req) => {
+    const admin = requireRole(req, ['admin']);
+    if ((req.body as any)?.confirm !== 'RESTORE') throw new HttpError(400, 'Type RESTORE to confirm', 'VALIDATION');
+    if (config.dbPath === ':memory:') throw new HttpError(409, 'In-memory database: nothing to restore', 'NOT_AVAILABLE');
+    try {
+      const v = requestRestore((req.params as any).name, admin.id);
+      audit(admin.id, 'admin.restore_requested', v.file);
+      return { ok: true, staged: v.file, note: 'Restart the server to apply. The current database is saved as a pre-restore copy first.' };
+    } catch (e: any) { throw new HttpError(400, e.message, 'RESTORE_FAILED'); }
+  });
+  app.post('/api/admin/backups/cancel-restore', async (req) => {
+    const admin = requireRole(req, ['admin']);
+    cancelRestore();
+    audit(admin.id, 'admin.restore_cancelled');
+    return { ok: true };
+  });
+  app.get('/api/admin/errors', async (req) => {
+    requireRole(req, STAFF);
+    return {
+      grouped: db().all('SELECT message, where_, COUNT(*) AS n, MAX(created_at) AS last FROM client_errors GROUP BY message, where_ ORDER BY last DESC LIMIT 100'),
+      perDay: db().all("SELECT substr(created_at,1,10) AS day, COUNT(*) AS n FROM client_errors WHERE created_at >= date('now','-14 day') GROUP BY day ORDER BY day"),
+    };
+  });
+
   app.get('/api/admin/emails', async (req) => {
     requireRole(req, STAFF);
     const mask = (e: string) => e.replace(/^(.)(.*)(@.*)$/, (_m, a, b, c) => a + '*'.repeat(Math.min(6, b.length)) + c);

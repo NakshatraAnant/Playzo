@@ -3,6 +3,7 @@
  * Lounge simulations never award XP, achievements or ZO (no reward loop around chance play).
  */
 import { db, dayKey, weekKey, nowIso } from './db';
+import { notify } from './notify';
 import { disabledSet, isEnabled } from './contentFlags';
 import { post, zoEarnedToday, ZO_DAILY_GAME_CAP } from './economy';
 import { BY_ID, FAMILY } from '../shared/catalogue';
@@ -47,6 +48,7 @@ export function unlock(userId: string, id: string): boolean {
   if (!r.changes) return false;
   post(userId, 'ZO', def.zo, 'reward', `achievement:${id}`, `ach:${userId}:${id}`);
   track('achievement_unlocked', userId, { id });
+  notify(userId, 'system', `Achievement unlocked: ${def.title}`, `${def.desc} (+${def.zo} ZO)`, '/me');
   return true;
 }
 
@@ -98,11 +100,13 @@ function bumpMissions(userId: string, e: MissionEvent) {
       if (off.has(m.id)) continue;
       const inc = m.match(e);
       if (!inc) continue;
+      const before = db().get<{ progress: number }>('SELECT progress FROM mission_progress WHERE user_id = ? AND mission_id = ? AND period = ?', userId, m.id, p)?.progress ?? 0;
       db().run(
         `INSERT INTO mission_progress (user_id, mission_id, period, progress) VALUES (?, ?, ?, ?)
          ON CONFLICT(user_id, mission_id, period) DO UPDATE SET progress = MIN(?, progress + ?)`,
         userId, m.id, p, Math.min(m.target, inc), m.target, inc,
       );
+      if (before < m.target && before + inc >= m.target) notify(userId, 'system', `Mission complete: ${m.title}`, `Claim your ${m.zo} ZO on the Missions page.`, '/missions');
     }
   }
 }

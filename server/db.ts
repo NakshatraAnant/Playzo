@@ -69,11 +69,46 @@ export class Db {
 let instance: Db | null = null;
 export function db(): Db {
   if (!instance) {
+    if (config.dbPath !== ':memory:') {
+      const r = applyPendingRestore(config.dbPath);
+      if (r) console.log(`[db] restored ${r.restored} (previous database kept as ${r.safetyCopy})`);
+    }
     instance = new Db(config.dbPath);
     const applied = instance.migrate();
     if (applied.length) console.log(`[db] applied migrations: ${applied.join(', ')}`);
+    // Startup validation: a fast integrity check; problems are logged loudly and reported by /api/health.
+    try {
+      const qc = instance.get<{ quick_check: string }>('PRAGMA quick_check')?.quick_check ?? 'unknown';
+      startupCheck = qc;
+      if (qc !== 'ok') console.error(`[db] INTEGRITY CHECK FAILED: ${qc}. Restore a backup from Admin → System.`);
+    } catch (e) { startupCheck = `error: ${String(e)}`; }
   }
   return instance;
+}
+export let startupCheck = 'not run';
+
+/** Restore requests are written by Admin → System and applied here, before the database is opened. */
+export const restoreRequestFile = (dbPath: string) => path.join(path.dirname(path.resolve(dbPath)), 'restore-request.json');
+export function applyPendingRestore(dbPath: string): { restored: string; safetyCopy: string } | null {
+  const reqFile = restoreRequestFile(dbPath);
+  if (!fs.existsSync(reqFile)) return null;
+  let req: { file?: string };
+  try { req = JSON.parse(fs.readFileSync(reqFile, 'utf8')); } catch { fs.renameSync(reqFile, reqFile + '.invalid'); return null; }
+  const backupsDir = path.join(path.dirname(path.resolve(dbPath)), 'backups');
+  const src = req.file ? path.join(backupsDir, path.basename(req.file)) : '';
+  if (!src || !fs.existsSync(src)) { console.error(`[db] restore skipped: backup not found (${req.file})`); fs.renameSync(reqFile, reqFile + '.failed'); return null; }
+  // Never lose the current data: keep it next to the backups before replacing it.
+  fs.mkdirSync(backupsDir, { recursive: true });
+  const safety = path.join(backupsDir, `pre-restore-${new Date().toISOString().replace(/[:.]/g, '-')}.db`);
+  if (fs.existsSync(dbPath)) {
+    const tmp = new DatabaseSync(dbPath);
+    tmp.exec(`VACUUM INTO '${safety.replace(/'/g, "''")}'`);
+    tmp.close();
+  }
+  for (const ext of ['-wal', '-shm']) if (fs.existsSync(dbPath + ext)) fs.unlinkSync(dbPath + ext);
+  fs.copyFileSync(src, dbPath);
+  fs.unlinkSync(reqFile);
+  return { restored: path.basename(src), safetyCopy: path.basename(safety) };
 }
 /** Tests: use an isolated database. */
 export function useDb(d: Db) { instance = d; }

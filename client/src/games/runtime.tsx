@@ -1,11 +1,13 @@
 import { createContext, lazy, ReactNode, Suspense, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { BY_ID, GameMeta } from '@shared/catalogue';
+import { BY_ID, FAMILY, GameMeta } from '@shared/catalogue';
+import { PREF_CATEGORIES, prefScore } from '@shared/preferences';
+const GameCoverLazy = lazy(() => import('../art/covers').then((m) => ({ default: (p: { id: string }) => <m.GameCover id={p.id} /> })));
 import { REPLAY_ENGINES } from '@shared/games';
 import type { Difficulty } from '@shared/engine';
 import { SeededRng } from '@shared/rng';
-import { api, ApiError, serverNow } from '../lib/api';
+import { api, ApiError, serverNow, trackEvent } from '../lib/api';
 import { useStore } from '../lib/store';
 import { sfx, stinger, prefs, setPref, onPrefs } from '../lib/sound';
 import { music } from '../lib/music';
@@ -124,6 +126,13 @@ export function Results({ meta, score, completion, verified, result, onReplay, e
     else { await navigator.clipboard?.writeText(`${text} ${url}`); toast('Copied to clipboard', 'ok'); }
   };
   const won = result?.winner === 'p1' || result?.winner === me?.id;
+  // Recommended next game: same taste category first, ordered by the player's preferences.
+  const next = useMemo(() => {
+    const prefs = me?.preferences ?? [];
+    const related = PREF_CATEGORIES.filter((c) => (c.games as readonly string[]).includes(meta.id)).flatMap((c) => c.games as readonly string[]);
+    const pool = [...new Set([...related, ...FAMILY.map((g) => g.id)])].filter((id) => id !== meta.id && BY_ID[id]?.env === 'family');
+    return BY_ID[pool.sort((a, b) => prefScore(b, prefs) - prefScore(a, prefs))[0]] ?? null;
+  }, [meta.id, me?.preferences]);
   return (
     <motion.div className="results" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <Chip tone="ok" icon="shield">{verified}</Chip>
@@ -145,6 +154,13 @@ export function Results({ meta, score, completion, verified, result, onReplay, e
         {meta.formats.includes('async') && me && !me.isGuest && <button className="btn btn-lg" onClick={challenge} disabled={busy}><Icon name="flag" />Challenge a friend</button>}
         <button className="btn btn-lg" onClick={share}><Icon name="share" />Share</button>
       </div>
+      {next && (
+        <Link to={`/play/${next.id}`} className="up-next" data-testid="up-next" onClick={() => sfx.select()}>
+          <span className="up-next-cover"><Suspense fallback={null}><GameCoverLazy id={next.id} /></Suspense></span>
+          <span><span className="dim" style={{ fontSize: 12 }}>Up next</span><b>{next.title}</b><span className="dim" style={{ fontSize: 12 }}>{next.tagline}</span></span>
+          <Icon name="next" />
+        </Link>
+      )}
       <Link to={`/games/${meta.id}`} className="btn btn-ghost">Back to {meta.title}</Link>
     </motion.div>
   );
@@ -278,6 +294,16 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
     else music.stop(1.2);
   }, [phase, gameId, run]);
   useEffect(() => { music.setUrgency(0); }, [run]);
+  // Game load time (analytics): from opening the game to the first playable screen, once per run.
+  const loadT0 = useRef(performance.now());
+  const loadSent = useRef(-1);
+  useEffect(() => { loadT0.current = performance.now(); }, [run, gameId]);
+  useEffect(() => {
+    if ((phase === 'tutorial' || phase === 'countdown' || phase === 'playing') && loadSent.current !== run) {
+      loadSent.current = run;
+      trackEvent('game_load', { game: gameId, ms: Math.round(performance.now() - loadT0.current) });
+    }
+  }, [phase, run, gameId]);
   // A run can end (crash, last answer) in the instant after Pause is pressed: never leave the
   // pause overlay sitting on top of the results screen.
   useEffect(() => {
