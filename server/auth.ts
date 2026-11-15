@@ -1,5 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { scryptSync, timingSafeEqual, randomBytes } from 'node:crypto';
+import { scrypt, scryptSync, timingSafeEqual, randomBytes } from 'node:crypto';
 import { db, nowIso } from './db';
 import { config } from './config';
 import { HttpError, User, currentUser, requireUser, str, rateLimit, audit, SESSION_COOKIE } from './http';
@@ -19,18 +19,26 @@ import { notify, prefsFor } from './notify';
 export const TERMS_VERSION = '2026-11';
 
 /* ---------------- passwords ---------------- */
-export function hashPassword(pw: string): string {
+const SCRYPT = { N: 16384, r: 8, p: 1 } as const;
+const scryptAsync = (pw: string, salt: Buffer) => new Promise<Buffer>((res, rej) => scrypt(pw, salt, 64, SCRYPT, (e, k) => (e ? rej(e) : res(k))));
+/** Async hashing runs on the worker thread pool, so sign-ups never stall live games. */
+export async function hashPassword(pw: string): Promise<string> {
   const salt = randomBytes(16);
-  const hash = scryptSync(pw, salt, 64, { N: 16384, r: 8, p: 1 });
-  return `scrypt$${salt.toString('base64')}$${hash.toString('base64')}`;
+  return `scrypt$${salt.toString('base64')}$${(await scryptAsync(pw, salt)).toString('base64')}`;
 }
-export function verifyPassword(pw: string, stored: string | null): boolean {
-  if (!stored) return false;
-  const [kind, s, h] = stored.split('$');
+/** Startup seeding only. */
+export function hashPasswordSync(pw: string): string {
+  const salt = randomBytes(16);
+  return `scrypt$${salt.toString('base64')}$${scryptSync(pw, salt, 64, SCRYPT).toString('base64')}`;
+}
+const DUMMY_HASH = hashPasswordSync(randomBytes(12).toString('hex'));
+/** Constant-work verification: unknown accounts still pay for one hash (no timing-based account discovery). */
+export async function verifyPassword(pw: string, stored: string | null): Promise<boolean> {
+  const [kind, sB64, hB64] = (stored ?? DUMMY_HASH).split('$');
   if (kind !== 'scrypt') return false;
-  const hash = scryptSync(pw, Buffer.from(s, 'base64'), 64, { N: 16384, r: 8, p: 1 });
-  const expected = Buffer.from(h, 'base64');
-  return expected.length === hash.length && timingSafeEqual(expected, hash);
+  const hash = await scryptAsync(pw, Buffer.from(sB64, 'base64'));
+  const expected = Buffer.from(hB64, 'base64');
+  return !!stored && expected.length === hash.length && timingSafeEqual(expected, hash);
 }
 
 /* ---------------- sessions ---------------- */
@@ -174,6 +182,7 @@ export async function authRoutes(app: FastifyInstance) {
       parentEmail = str(b.parentEmail, 'Parent or guardian email', 5, 160).toLowerCase();
       if (!validEmail(parentEmail) || parentEmail === email) throw new HttpError(400, 'Enter a different, valid parent or guardian email', 'VALIDATION');
     }
+    const pwHash = await hashPassword(password);
     if (db().get('SELECT 1 FROM users WHERE email = ?', email)) throw new HttpError(409, 'An account with this email already exists', 'EMAIL_TAKEN');
     const existingName = db().get<{ id: string }>('SELECT id FROM users WHERE username = ?', username);
     const guest = currentUser(req);
@@ -184,10 +193,10 @@ export async function authRoutes(app: FastifyInstance) {
     if (guest && guest.is_guest) {
       id = guest.id;
       db().run('UPDATE users SET email=?, username=?, display_name=?, password_hash=?, is_guest=0, dob=?, age_band=?, parent_email=?, preferences=?' + (b.avatar ? ', avatar=?' : '') + ' WHERE id=?',
-        ...[email, username, display, hashPassword(password), dob, band, parentEmail, JSON.stringify(preferences), ...(b.avatar ? [avatar] : []), id]);
+        ...[email, username, display, pwHash, dob, band, parentEmail, JSON.stringify(preferences), ...(b.avatar ? [avatar] : []), id]);
     } else {
       id = newId('u_');
-      db().run('INSERT INTO users (id, email, username, display_name, password_hash, dob, age_band, parent_email, avatar, preferences) VALUES (?,?,?,?,?,?,?,?,?,?)', id, email, username, display, hashPassword(password), dob, band, parentEmail, avatar, JSON.stringify(preferences));
+      db().run('INSERT INTO users (id, email, username, display_name, password_hash, dob, age_band, parent_email, avatar, preferences) VALUES (?,?,?,?,?,?,?,?,?,?)', id, email, username, display, pwHash, dob, band, parentEmail, avatar, JSON.stringify(preferences));
       createSession(reply, id, req);
     }
     db().run("INSERT INTO consents (user_id, kind, version) VALUES (?, 'terms', ?), (?, 'privacy', ?)", id, TERMS_VERSION, id, TERMS_VERSION);
@@ -217,7 +226,7 @@ export async function authRoutes(app: FastifyInstance) {
     const locked = loginLocked(key);
     if (locked) throw new HttpError(429, 'Too many failed sign-in attempts. Try again in a few minutes or reset your password.', 'ACCOUNT_LOCKED', { retryAfterSec: Math.ceil((locked - Date.now()) / 1000) });
     const u = db().get<User>("SELECT * FROM users WHERE (email = ? OR username = ?) AND status = 'active' AND is_guest = 0", ident.toLowerCase(), ident);
-    if (!u || !verifyPassword(password, u.password_hash as string)) {
+    if (!(await verifyPassword(password, u ? (u.password_hash as string) : null)) || !u) {
       const nowLocked = loginFailed(key);
       if (nowLocked && u) {
         audit(u.id, 'auth.login_locked', u.id);
@@ -272,7 +281,8 @@ export async function authRoutes(app: FastifyInstance) {
     rateLimit(req, 'auth', 10);
     const b = (req.body ?? {}) as Record<string, unknown>;
     const uid = consumeToken(str(b.token, 'Token', 10, 100), 'reset_password');
-    db().run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(str(b.password, 'Password', 8, 128)), uid);
+    const newHash = await hashPassword(str(b.password, 'Password', 8, 128));
+    db().run('UPDATE users SET password_hash = ? WHERE id = ?', newHash, uid);
     db().run('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL', nowIso(), uid);
     const ru = db().get<{ email: string | null; username: string }>('SELECT email, username FROM users WHERE id = ?', uid);
     if (ru) { loginCleared(`login:${ru.username.toLowerCase()}`); if (ru.email) loginCleared(`login:${ru.email}`); }
@@ -284,8 +294,9 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/api/auth/change-password', async (req) => {
     const u = requireUser(req);
     const b = (req.body ?? {}) as Record<string, unknown>;
-    if (!verifyPassword(str(b.current, 'Current password', 1, 128), u.password_hash as string)) throw new HttpError(401, 'Current password is incorrect', 'BAD_CREDENTIALS');
-    db().run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(str(b.password, 'New password', 8, 128)), u.id);
+    if (!(await verifyPassword(str(b.current, 'Current password', 1, 128), u.password_hash as string))) throw new HttpError(401, 'Current password is incorrect', 'BAD_CREDENTIALS');
+    const changed = await hashPassword(str(b.password, 'New password', 8, 128));
+    db().run('UPDATE users SET password_hash = ? WHERE id = ?', changed, u.id);
     // Sign out every other device; keep this one.
     const mine = req.cookies?.[SESSION_COOKIE];
     const revoked = db().run('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL AND token_hash != ?', nowIso(), u.id, mine ? sha256(mine) : '');
@@ -300,7 +311,7 @@ export async function authRoutes(app: FastifyInstance) {
     const u = requireUser(req);
     const b = (req.body ?? {}) as Record<string, unknown>;
     if (b.confirm !== 'DELETE') throw new HttpError(400, 'Type DELETE to confirm', 'VALIDATION');
-    if (!u.is_guest && !verifyPassword(str(b.password, 'Password', 1, 128), u.password_hash as string)) throw new HttpError(401, 'Password is incorrect', 'BAD_CREDENTIALS');
+    if (!u.is_guest && !(await verifyPassword(str(b.password, 'Password', 1, 128), u.password_hash as string))) throw new HttpError(401, 'Password is incorrect', 'BAD_CREDENTIALS');
     const hashed = sha256(u.id);
     db().tx(() => {
       db().run('INSERT OR REPLACE INTO deletion_requests (user_id, requested_at, completed_at) VALUES (?, ?, ?)', hashed, nowIso(), nowIso());

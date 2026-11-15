@@ -7,13 +7,24 @@ test('register -> welcome -> sign out -> sign in -> reset password -> delete acc
   await skipTutorials(page, []);
   const name = uniq('e2eu');
   await page.goto('/register');
+  // Step 1: date of birth first.
+  await page.getByLabel(/date of birth/i).fill('1994-06-06');
+  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await expect(page.getByText(/PLAYZO Lounge/)).toBeVisible(); // 21+ eligibility message by date of birth
+  // Step 2: account + avatar.
   await page.getByLabel(/email/i).first().fill(`${name}@e2e.test`);
   await page.getByLabel(/username/i).fill(name);
   await page.getByLabel(/^password/i).fill('e2e-password-1');
-  await page.getByLabel(/date of birth/i).fill('1994-06-06');
+  await page.getByRole('radio', { name: 'Avatar 3' }).click();
   await page.getByRole('checkbox').first().check();
   await page.getByRole('button', { name: /create account/i }).click();
+  // Step 3: optional game tastes.
+  await page.getByRole('button', { name: 'Strategy' }).click();
+  await page.getByRole('button', { name: /Save and start playing/ }).click();
   await expect(page).toHaveURL(/\/welcome/);
+  const me0 = (await (await page.request.get('/api/auth/me')).json()).user;
+  expect(me0.preferences).toEqual(['strategy']);
+  expect(me0.avatar).toBe('orb-3');
 
   // Settings shows this device and email-verification state honestly.
   await page.goto('/settings');

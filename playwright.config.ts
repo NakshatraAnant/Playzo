@@ -26,7 +26,7 @@ export default defineConfig({
   outputDir: 'test-results',
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Edge'], channel, viewport: { width: 1366, height: 860 } } },
-    { name: 'mobile', use: { ...devices['Pixel 7'], channel, viewport: { width: 390, height: 844 } }, testMatch: /(smoke|family|auth)\.spec\.ts/ },
+    { name: 'mobile', use: { ...devices['Pixel 7'], channel, viewport: { width: 390, height: 844 } }, testMatch: /(smoke|family|auth|journey)\.spec\.ts/ },
   ],
   webServer: {
     command: 'npx concurrently -k -n api,web "npx tsx server/index.ts" "node scripts/wait-api.mjs && npx vite"',

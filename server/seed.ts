@@ -4,7 +4,7 @@
  */
 import { db } from './db';
 import { config } from './config';
-import { hashPassword } from './auth';
+import { hashPasswordSync } from './auth';
 import { newId } from './secureRng';
 
 export function seed() {
@@ -22,7 +22,7 @@ export function seed() {
     if (!ex) {
       const id = newId('u_');
       db().run("INSERT INTO users (id, email, username, display_name, password_hash, dob, age_band, role, email_verified_at, avatar) VALUES (?, ?, 'playzo_admin', 'PLAYZO Admin', ?, '1990-01-01', 'adult', 'admin', ?, 'orb-12')",
-        id, config.adminEmail.toLowerCase(), hashPassword(config.adminPassword), new Date().toISOString());
+        id, config.adminEmail.toLowerCase(), hashPasswordSync(config.adminPassword), new Date().toISOString());
       console.log(`[seed] created admin ${config.adminEmail}`);
     }
   }
