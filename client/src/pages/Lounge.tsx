@@ -10,7 +10,8 @@ import { BY_ID } from '@shared/catalogue';
 
 const REASON: Record<string, string> = {
   guest_account: 'Create a registered account',
-  not_adult: 'Lounge is for adults (18+) only',
+  not_adult: 'The Lounge is for players aged 21 and over',
+  under_lounge_min_age: 'The Lounge is for players aged 21 and over',
   age_verification_not_production_grade: 'A production age-assurance check is required',
   age_not_verified: 'Complete age assurance',
   lounge_terms_not_accepted: 'Accept the Lounge terms',
@@ -32,7 +33,7 @@ function GateFlow() {
   const terms = async () => { setBusy(true); try { await api.post('/api/auth/lounge-terms'); await refresh(); } catch (e: any) { toast(e.message, 'bad'); } finally { setBusy(false); } };
   return (
     <div className="stack" style={{ maxWidth: 640 }}>
-      <h1 style={{ fontSize: 'var(--fs-2xl)' }}>PLAYZO Lounge <span className="chip gold">18+</span></h1>
+      <h1 style={{ fontSize: 'var(--fs-2xl)' }}>PLAYZO Lounge <span className="chip gold">21+</span></h1>
       <p className="muted">Social casino-style simulations for verified adults. Fun Chips are free, can't be bought, and have no cash value. Nothing can be withdrawn, transferred or redeemed.</p>
       <div className="panel col">
         {reasons.map((r) => <div key={r} className="row"><Icon name="lock" /><span>{REASON[r] ?? r}</span></div>)}
@@ -60,7 +61,7 @@ function GateFlow() {
                 <li>Every outcome uses a server-side cryptographic RNG and published mathematics, the same for every player.</li>
                 <li>Set time limits or a cool-off in Settings at any time. Play is never required.</li>
               </ul>
-              <button className="btn btn-gold" disabled={busy} onClick={terms}>I'm 18+ and I accept</button>
+              <button className="btn btn-gold" disabled={busy} onClick={terms}>I'm 21+ and I accept</button>
             </div>
           )}
         </>
@@ -82,7 +83,7 @@ export function Lounge() {
   return (
     <div className="stack-lg lounge">
       <section className="hero" style={{ background: 'radial-gradient(120% 120% at 100% 0%, rgba(216,180,90,.35), transparent 50%), linear-gradient(160deg, #1a1206, #07040f)', borderColor: 'rgba(216,180,90,.35)', minHeight: 220 }}>
-        <Chip tone="gold" icon="crown">PLAYZO Lounge · 18+</Chip>
+        <Chip tone="gold" icon="crown">PLAYZO Lounge · 21+</Chip>
         <div className="tagline" style={{ fontSize: 'clamp(1.6rem, 1rem + 3vw, 2.8rem)' }}>Velvet nights. <span style={{ background: 'var(--grad-lounge)', WebkitBackgroundClip: 'text', color: 'transparent' }}>Zero stakes.</span></div>
         <div className="row wrap"><span className="chip gold mono">{(data?.chips ?? 0).toLocaleString()} Fun Chips</span><span className="chip">Today {data?.minutesToday ?? 0} min{data?.dailyLimitMin ? ` / ${data.dailyLimitMin} limit` : ''}</span><Link className="chip" to="/settings">Play controls</Link><Link className="chip" to="/legal/fair-play">Fairness & maths</Link></div>
       </section>
@@ -119,7 +120,7 @@ export function LoungeGame() {
       <section className="panel" style={{ padding: 0, overflow: 'hidden', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
         <div style={{ minHeight: 280, position: 'relative' }}><GameCover id={g.id} className="cover" /></div>
         <div className="col" style={{ padding: 24 }}>
-          <div className="row wrap" style={{ gap: 6 }}><Chip tone="gold">18+</Chip><Chip>{g.category}</Chip><Chip tone={locked ? 'warn' : g.gate === 'dev-preview' ? 'bad' : 'ok'}>{locked ? 'Pending legal review' : g.gate === 'dev-preview' ? 'Dev preview' : 'Approved'}</Chip></div>
+          <div className="row wrap" style={{ gap: 6 }}><Chip tone="gold">21+</Chip><Chip>{g.category}</Chip><Chip tone={locked ? 'warn' : g.gate === 'dev-preview' ? 'bad' : 'ok'}>{locked ? 'Pending legal review' : g.gate === 'dev-preview' ? 'Dev preview' : 'Approved'}</Chip></div>
           <h1 style={{ fontSize: 'var(--fs-2xl)' }}>{g.title}</h1>
           <p style={{ color: g.theme.accent, fontWeight: 700 }}>{g.tagline}</p>
           <p className="muted">{g.description}</p>

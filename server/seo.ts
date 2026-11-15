@@ -8,7 +8,7 @@ export function sitemapXml(base = config.publicUrl): string {
   const urls = ['/', '/games', '/daily', '/leaderboards', '/legal/fair-play', '/legal/privacy', '/legal/terms', ...FAMILY.map((g) => `/games/${slug(g.id)}`)];
   return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${base}${u}</loc><changefreq>weekly</changefreq></url>`).join('\n')}\n</urlset>\n`;
 }
-/** The Lounge (18+) is excluded from crawling and from the sitemap. */
+/** The Lounge (21+) is excluded from crawling and from the sitemap. */
 export const robotsTxt = (base = config.publicUrl) => `User-agent: *\nAllow: /\nDisallow: /lounge\nDisallow: /admin\nDisallow: /api/\nSitemap: ${base}/sitemap.xml\n`;
 
 export async function seoRoutes(app: FastifyInstance) {

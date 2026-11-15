@@ -14,7 +14,7 @@ const DOCS: Record<string, { title: string; body: JSX.Element }> = {
           <li><b>Real-time games</b> (Reflex Arena, Rhythm Rush, Obstacle Sprint, Tower Tactics and others) run on your device from a shared seed. When you finish, the server re-simulates your exact inputs with the same deterministic engine. A score only counts if the replay reproduces it and the timing is humanly possible.</li>
           <li>Daily puzzles, challenges and races give every player the same seed.</li>
         </ul>
-        <h3>Lounge simulations (18+)</h3>
+        <h3>Lounge simulations (21+)</h3>
         <ul>
           <li>Outcomes use a server-side HMAC-SHA256 cryptographic generator. Each session publishes a SHA-256 commitment of its secret seed when it starts and reveals the seed when it ends.</li>
           <li>Probabilities never depend on who you are, your balance, your history, membership or spending. There are no hidden adjustments, streak manipulation or fake near-misses.</li>
@@ -47,7 +47,7 @@ const DOCS: Record<string, { title: string; body: JSX.Element }> = {
         <ul>
           <li>PLAYZO is an entertainment platform. There is no real-money gaming of any kind: no deposits, stakes, cash prizes or withdrawals.</li>
           <li>ZO coins and Fun Chips are virtual items with no monetary value. They cannot be bought (Fun Chips), sold, transferred, exchanged or redeemed.</li>
-          <li>Lounge simulations are limited to verified adults (18+) and stay disabled until legal approval is recorded for each game.</li>
+          <li>Lounge simulations are limited to players aged 21 and over and stay disabled until legal approval is recorded for each game.</li>
           <li>Cheating, exploiting bugs, harassment and impersonation lead to suspension. Report concerns from any profile.</li>
           <li>Membership (PLAYZO Plus) is cosmetic and ad-free only, and never affects outcomes. Real payments are not enabled in this build.</li>
         </ul>

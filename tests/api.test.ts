@@ -55,16 +55,62 @@ describe('auth & security', () => {
     expect((await c.post('/api/auth/login', { identifier: 'loginuser', password: 'nope-nope' })).status).toBe(401);
     expect((await c.post('/api/auth/login', { identifier: 'loginuser@test.local', password: 'password123' })).status).toBe(200);
   });
-  it('under-13 registration requires a parent email and starts without social permissions', async () => {
+  it('under-13 accounts are refused by default (guest play stays open) and nothing is stored', async () => {
     const c = new Client();
     const dob = new Date(Date.now() - 9 * 365.25 * 86400_000).toISOString().slice(0, 10);
-    expect((await reg(c, 'kid1', dob)).status).toBe(400);
-    const r = await reg(c, 'kid2', dob, { parentEmail: 'parent@test.local' });
-    expect(r.body.user.ageBand).toBe('child');
-    expect(r.body.user.social.canSendFriendRequests).toBe(false);
-    expect(r.body.user.social.canUsePublicMatchmaking).toBe(false);
-    const out = (await c.get('/api/dev/outbox')).body.messages;
-    expect(out.some((m: any) => m.to_email === 'parent@test.local')).toBe(true);
+    const chk = await c.post('/api/auth/age-check', { dob });
+    expect(chk.body).toMatchObject({ canRegister: false, band: 'child', loungeEligible: false });
+    const r = await reg(c, 'kid0', dob, { parentEmail: 'parent0@test.local' });
+    expect(r.status).toBe(403);
+    expect(r.body.code).toBe('UNDER_13');
+    expect(db().get("SELECT 1 FROM users WHERE username = 'kid0'")).toBeUndefined();
+    expect(db().get("SELECT 1 FROM dev_outbox WHERE to_email = 'parent0@test.local'")).toBeUndefined();
+    expect((await c.post('/api/auth/guest')).status).toBe(200); // still free to play as a guest
+  });
+  it('when explicitly enabled, under-13 registration requires a parent email and starts without social permissions', async () => {
+    config.allowUnder13 = true;
+    try {
+      const c = new Client();
+      const dob = new Date(Date.now() - 9 * 365.25 * 86400_000).toISOString().slice(0, 10);
+      expect((await reg(c, 'kid1', dob)).status).toBe(400);
+      const r = await reg(c, 'kid2', dob, { parentEmail: 'parent@test.local' });
+      expect(r.body.user.ageBand).toBe('child');
+      expect(r.body.user.social.canSendFriendRequests).toBe(false);
+      expect(r.body.user.social.canUsePublicMatchmaking).toBe(false);
+      const out = (await c.get('/api/dev/outbox')).body.messages;
+      expect(out.some((m: any) => m.to_email === 'parent@test.local')).toBe(true);
+    } finally { config.allowUnder13 = false; }
+  });
+  it('age check: birthdays and leap days are exact; the Lounge needs 21 by date of birth', async () => {
+    const { ageOn } = await import('../server/access');
+    expect(ageOn('2004-02-29', new Date('2025-02-28T12:00:00Z'))).toBe(20); // leap-day birthday not yet reached
+    expect(ageOn('2004-02-29', new Date('2025-03-01T00:00:00Z'))).toBe(21);
+    expect(ageOn('2005-11-15', new Date('2026-11-14T23:59:59Z'))).toBe(20);
+    expect(ageOn('2005-11-15', new Date('2026-11-15T00:00:00Z'))).toBe(21);
+    const c = new Client();
+    const just20 = new Date(Date.now() - 20.5 * 365.25 * 86400_000).toISOString().slice(0, 10);
+    expect((await c.post('/api/auth/age-check', { dob: just20 })).body).toMatchObject({ canRegister: true, band: 'adult', loungeEligible: false, loungeMinAge: 21 });
+    expect((await c.post('/api/auth/age-check', { dob: '1990-01-01' })).body.loungeEligible).toBe(true);
+    expect((await c.post('/api/auth/age-check', { dob: '2999-01-01' })).status).toBe(400);
+  });
+  it('an adult aged 18-20 can never see, verify for or enter the Lounge, even as a QA tester', async () => {
+    const c = new Client();
+    const dob = new Date(Date.now() - 19.5 * 365.25 * 86400_000).toISOString().slice(0, 10);
+    await reg(c, 'young19', dob);
+    db().run("UPDATE users SET role = 'tester' WHERE username = 'young19'");
+    config.adultDevPreview = true; config.loungeEnabled = true;
+    try {
+      const me = (await c.get('/api/auth/me')).body.user;
+      expect(me.ageBand).toBe('adult');
+      expect(me.lounge.visible).toBe(false);
+      expect(me.lounge.reasons).toContain('under_lounge_min_age');
+      expect((await c.post('/api/auth/age-assurance', { method: 'dev-attestation' })).status).toBe(403);
+      expect((await c.post('/api/auth/lounge-terms')).status).toBe(403);
+      expect((await c.get('/api/lounge/status')).status).toBe(404);
+      expect((await c.get('/api/games?env=lounge')).body.games).toHaveLength(0);
+      expect((await c.get('/api/games/blackjack')).status).toBe(404);
+      expect((await c.post('/api/sessions', { gameId: 'blackjack' })).status).toBe(404);
+    } finally { config.adultDevPreview = false; config.loungeEnabled = false; }
   });
   it('password reset revokes sessions', async () => {
     const c = new Client();

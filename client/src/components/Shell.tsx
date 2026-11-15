@@ -65,7 +65,7 @@ export function Shell() {
           <NavLink to="/leaderboards"><Icon name="trophy" />Leaderboards</NavLink>
           <NavLink to="/friends"><Icon name="heart" />Friends</NavLink>
           <NavLink to="/shop"><Icon name="bag" />Shop</NavLink>
-          {me?.lounge?.visible && <NavLink to="/lounge"><Icon name="crown" />Lounge 18+</NavLink>}
+          {me?.lounge?.visible && <NavLink to="/lounge"><Icon name="crown" />Lounge 21+</NavLink>}
           {(me?.role === 'admin' || me?.role === 'support') && <NavLink to="/admin"><Icon name="admin" />Admin</NavLink>}
           <div className="spacer" />
           <NavLink to="/settings"><Icon name="gear" />Settings</NavLink>

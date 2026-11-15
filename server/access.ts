@@ -1,5 +1,5 @@
 /**
- * Access policy: age bands, Lounge (18+) entitlement and legal gates.
+ * Access policy: age bands, Lounge (21+) entitlement and legal gates.
  * Every decision here is enforced server-side; the client only mirrors it for display.
  */
 import { config } from './config';
@@ -56,7 +56,7 @@ export function legalGate(gameId: string, u?: User | null): { status: LegalGate;
   return { status: 'pending_legal_review', ref: null };
 }
 
-export interface LoungeAccess { entitled: boolean; reasons: string[]; cooloffUntil: string | null; qaPreview: boolean; visible: boolean }
+export interface LoungeAccess { entitled: boolean; reasons: string[]; cooloffUntil: string | null; qaPreview: boolean; visible: boolean; minAge?: number; ageSource?: 'verified' | 'dev-attestation' | 'self-declared' }
 
 /** Is this user entitled to the Lounge environment at all (independent of individual game gates)? */
 export function loungeAccess(u: User | null): LoungeAccess {
@@ -66,23 +66,47 @@ export function loungeAccess(u: User | null): LoungeAccess {
   if (!config.loungeEnabled && !qa) reasons.push('lounge_disabled');
   if (u.is_guest) reasons.push('guest_account');
   if (u.age_band !== 'adult') reasons.push('not_adult');
-  // Re-check DOB at request time (people age; bands are cached).
-  if (u.dob && bandFor(ageOn(u.dob)) !== 'adult') reasons.push('not_adult');
+  // Age is always recomputed from the stored date of birth (birthdays and leap years handled by ageOn).
+  const old = loungeAgeOk(u);
+  if (!old) reasons.push('under_lounge_min_age');
   const method = u.adult_verify_method as string | null;
   const provider = method ? AGE_ASSURANCE_PROVIDERS[method] : undefined;
-  if (!u.adult_verified_at || !provider) reasons.push('age_not_verified');
-  else if (!provider.production && (config.production || !qa)) reasons.push('age_verification_not_production_grade');
-  else if (Date.now() - Date.parse(u.adult_verified_at) > config.ageVerificationDays * 86400_000) reasons.push('age_verification_expired');
+  if (config.loungeRequireAgeAssurance) {
+    if (!u.adult_verified_at || !provider) reasons.push('age_not_verified');
+    else if (!provider.production && (config.production || !qa)) reasons.push('age_verification_not_production_grade');
+    else if (Date.now() - Date.parse(u.adult_verified_at) > config.ageVerificationDays * 86400_000) reasons.push('age_verification_expired');
+  }
   const consent = db().get('SELECT 1 AS ok FROM consents WHERE user_id = ? AND kind = ?', u.id, 'lounge_terms');
   if (!consent) reasons.push('lounge_terms_not_accepted');
   const cool = (u as any).lounge_cooloff_until as string | null;
   if (cool && cool > new Date().toISOString()) reasons.push('cool_off_active');
-  const adult = !u.is_guest && u.age_band === 'adult' && (!u.dob || bandFor(ageOn(u.dob)) === 'adult');
   return {
     entitled: reasons.length === 0, reasons: [...new Set(reasons)], cooloffUntil: cool && cool > new Date().toISOString() ? cool : null,
     qaPreview: qa,
-    // The Lounge entry point is shown only to adults, and only when the Lounge is switched on or for QA accounts.
-    visible: adult && (config.loungeEnabled || qa),
+    // The Lounge entry point is shown only to registered accounts at or above the Lounge minimum age
+    // (21 by default), and only when the Lounge is switched on or for QA accounts.
+    visible: !u.is_guest && old && (config.loungeEnabled || qa),
+    minAge: config.loungeMinAge,
+    ageSource: provider?.production ? 'verified' : u.adult_verified_at ? 'dev-attestation' : 'self-declared',
+  };
+}
+
+/** Lounge minimum age (configurable, 21 by default), computed from the stored date of birth. */
+export function loungeAgeOk(u: Pick<User, 'dob' | 'is_guest'> | null): boolean {
+  if (!u || u.is_guest || !u.dob) return false;
+  return ageOn(u.dob) >= config.loungeMinAge;
+}
+
+/** Access summary for a date of birth (used by the onboarding age step; nothing is stored). */
+export function agePolicyFor(dob: string) {
+  const age = ageOn(dob);
+  const band = bandFor(age);
+  return {
+    age, band,
+    canRegister: band !== 'child' || config.allowUnder13,
+    familyGames: true,
+    loungeEligible: age >= config.loungeMinAge,
+    loungeMinAge: config.loungeMinAge,
   };
 }
 

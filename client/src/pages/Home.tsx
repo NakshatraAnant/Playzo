@@ -125,7 +125,7 @@ export default function Home() {
           )}
           {data.lounge.entitled && (
             <Link to="/lounge" className="panel row" style={{ background: 'linear-gradient(120deg, rgba(216,180,90,.18), rgba(10,10,30,.4))', borderColor: 'rgba(216,180,90,.4)' }}>
-              <Icon name="crown" /><div><b>PLAYZO Lounge (18+)</b><div className="muted" style={{ fontSize: 13 }}>Adult-only social casino simulations with free, non-redeemable Fun Chips.</div></div><span className="spacer" /><Icon name="next" />
+              <Icon name="crown" /><div><b>PLAYZO Lounge (21+)</b><div className="muted" style={{ fontSize: 13 }}>Adult-only social casino simulations with free, non-redeemable Fun Chips.</div></div><span className="spacer" /><Icon name="next" />
             </Link>
           )}
         </>

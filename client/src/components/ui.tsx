@@ -42,7 +42,7 @@ export function GameTile({ g, to, wide, showFav }: { g: GameCardData; to?: strin
       <div className="shade" />
       <div className="badges">
         {g.multiplayer && <Chip icon="users">Multiplayer</Chip>}
-        {g.env === 'lounge' && <Chip tone="gold">18+</Chip>}
+        {g.env === 'lounge' && <Chip tone="gold">21+</Chip>}
         {g.gate === 'pending_legal_review' && <Chip tone="warn" icon="lock">Legal review</Chip>}
         {g.live === false && <Chip tone="warn">Maintenance</Chip>}
       </div>

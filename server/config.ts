@@ -45,6 +45,12 @@ export const config = {
   loungeEnabled: bool(env.PLAYZO_LOUNGE_ENABLED),
   /** Internal QA preview: localhost only, never in production, and only for admin/tester accounts. */
   adultDevPreview: !production && bool(env.PLAYZO_ADULT_DEV_PREVIEW),
+  /** PLAYZO Lounge minimum age (product decision: 21). Computed from date of birth on every request. */
+  loungeMinAge: Math.max(18, Number(env.PLAYZO_LOUNGE_MIN_AGE ?? 21)),
+  /** Require an age-assurance result (not just a self-declared date of birth) for the Lounge. */
+  loungeRequireAgeAssurance: (env.PLAYZO_LOUNGE_REQUIRE_AGE_ASSURANCE ?? 'true') !== 'false',
+  /** Under-13 accounts stay closed until a verified parental-consent flow (with real email delivery) is enabled. */
+  allowUnder13: bool(env.PLAYZO_ALLOW_UNDER13),
   /** Serve the built app (dist/) from the API process outside production (`npm run local`). */
   serveDist: bool(env.PLAYZO_SERVE_DIST),
   /** Adult age verification must be renewed after this many days. */

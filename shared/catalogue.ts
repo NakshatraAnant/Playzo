@@ -11,8 +11,8 @@ export interface GameMeta {
   title: string;
   env: Env;
   category: string;
-  /** Minimum age band label (lounge games are always 18+). */
-  age: '6+' | '8+' | '10+' | '12+' | '18+';
+  /** Minimum age band label (lounge games are 21+). */
+  age: '6+' | '8+' | '10+' | '12+' | '21+';
   tagline: string;
   description: string;
   usp: string;
@@ -35,9 +35,9 @@ const FAM = 'family' as const;
 const LNG = 'lounge' as const;
 
 export const CATALOGUE: GameMeta[] = [
-  /* =============================== LOUNGE (18+, gated) =============================== */
+  /* =============================== LOUNGE (21+, gated) =============================== */
   {
-    n: 1, id: 'eu-roulette', title: 'European Roulette', env: LNG, category: 'Table & Wheel', age: '18+',
+    n: 1, id: 'eu-roulette', title: 'European Roulette', env: LNG, category: 'Table & Wheel', age: '21+',
     tagline: 'One zero. Thirty-seven pockets. Riviera nights.',
     description: 'A single-zero wheel simulation with inside and outside bets, a brass-and-emerald table and a physically eased ball spin. Play with free, non-redeemable Fun Chips only.',
     usp: 'Every spin shows its pocket probability and the published 97.30% theoretical return.',
@@ -52,7 +52,7 @@ export const CATALOGUE: GameMeta[] = [
     tags: ['wheel', 'classic'], math: 'Theoretical RTP 97.30% on every bet type (36/37).',
   },
   {
-    n: 2, id: 'us-roulette', title: 'American Roulette', env: LNG, category: 'Table & Wheel', age: '18+',
+    n: 2, id: 'us-roulette', title: 'American Roulette', env: LNG, category: 'Table & Wheel', age: '21+',
     tagline: 'Double zero under neon boulevard lights.',
     description: 'A 38-pocket wheel with 0 and 00 on a crimson neon layout. The higher house edge is shown openly beside the table.',
     usp: 'Side-by-side edge comparison with the single-zero wheel, right on the table.',
@@ -66,7 +66,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'Theoretical RTP 94.74% (36/38) on all bets.',
   },
   {
-    n: 3, id: 'fr-roulette', title: 'French Roulette', env: LNG, category: 'Table & Wheel', age: '18+',
+    n: 3, id: 'fr-roulette', title: 'French Roulette', env: LNG, category: 'Table & Wheel', age: '21+',
     tagline: 'Belle Epoque elegance with La Partage.',
     description: 'Single-zero roulette with the La Partage rule: when zero lands, half of every even-money bet is returned.',
     usp: 'La Partage lowers the even-money edge to 1.35%, explained visually on the table.',
@@ -80,7 +80,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'RTP 98.65% on even-money bets (La Partage), 97.30% on all others.',
   },
   {
-    n: 4, id: 'blackjack', title: 'Blackjack Classic', env: LNG, category: 'Table & Wheel', age: '18+',
+    n: 4, id: 'blackjack', title: 'Blackjack Classic', env: LNG, category: 'Table & Wheel', age: '21+',
     tagline: 'Velvet 21: six decks, honest rules.',
     description: 'Six-deck blackjack with dealer standing on soft 17, double on any two cards, one split and blackjack paying 3:2.',
     usp: 'An optional strategy hint shows the mathematically best move for every hand.',
@@ -94,7 +94,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'About 99.5% RTP with basic strategy (simulation-verified; see docs).',
   },
   {
-    n: 5, id: 'blackjack-duel', title: 'Blackjack Duel', env: LNG, category: 'Table & Wheel', age: '18+',
+    n: 5, id: 'blackjack-duel', title: 'Blackjack Duel', env: LNG, category: 'Table & Wheel', age: '21+',
     tagline: 'Rival 21: you against a rival who plays by printed rules.',
     description: 'Head-to-head 21 from one shared shoe. Your rival follows a fixed, published rule: hit below 17, stand on 17 or more. Closest to 21 wins.',
     usp: 'A rival whose every decision follows rules printed on the table.',
@@ -107,7 +107,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'RTP depends on your play; simulation for a hit-under-17 player is documented.',
   },
   {
-    n: 6, id: 'baccarat', title: 'Baccarat', env: LNG, category: 'Table & Wheel', age: '18+',
+    n: 6, id: 'baccarat', title: 'Baccarat', env: LNG, category: 'Table & Wheel', age: '21+',
     tagline: 'Jade Pavilion Punto Banco.',
     description: 'Eight-deck Punto Banco with the full third-card tableau, 5% banker commission and a tie bet paying 8:1.',
     usp: 'A live tableau panel explains why each third card was or was not drawn.',
@@ -120,7 +120,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'RTP: Banker 98.94%, Player 98.76%, Tie 85.64%.',
   },
   {
-    n: 7, id: 'sic-bo', title: 'Sic Bo', env: LNG, category: 'Table & Wheel', age: '18+',
+    n: 7, id: 'sic-bo', title: 'Sic Bo', env: LNG, category: 'Table & Wheel', age: '21+',
     tagline: 'Three dice under paper lanterns.',
     description: 'A three-dice table with small/big, totals, doubles and triples, with 3D dice tumbling in a glass shaker.',
     usp: 'Every bet shows its exact probability from the 216 possible dice outcomes.',
@@ -133,7 +133,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'Small/Big 97.22%; totals 81-90%; any triple 86.11%; specific double 81.48%; specific triple 69.91%.',
   },
   {
-    n: 8, id: 'holdem', title: "Texas Hold'em Social", env: LNG, category: 'Card & Social', age: '18+',
+    n: 8, id: 'holdem', title: "Texas Hold'em Social", env: LNG, category: 'Card & Social', age: '21+',
     tagline: 'River Table: outplay three bots.',
     description: "No-limit Texas Hold'em against three computer opponents with distinct, documented playing styles. Play-money only.",
     usp: 'Bots act on documented, hand-strength rules and never see your cards.',
@@ -146,7 +146,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'Player-vs-player style; the house takes no rake. Deck shuffled by a secure RNG.',
   },
   {
-    n: 9, id: 'omaha', title: 'Omaha Poker Social', env: LNG, category: 'Card & Social', age: '18+',
+    n: 9, id: 'omaha', title: 'Omaha Poker Social', env: LNG, category: 'Card & Social', age: '21+',
     tagline: 'Four Card Summit: use exactly two.',
     description: 'Pot-limit Omaha against computer opponents. You must use exactly two hole cards and three board cards.',
     usp: 'Your best legal Omaha hand is highlighted automatically, which teaches the exactly-two rule.',
@@ -159,7 +159,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'Player-vs-player style; no rake.',
   },
   {
-    n: 10, id: 'teen-patti', title: 'Teen Patti Social', env: LNG, category: 'Card & Social', age: '18+',
+    n: 10, id: 'teen-patti', title: 'Teen Patti Social', env: LNG, category: 'Card & Social', age: '21+',
     tagline: 'Mehfil table: three cards, big moments.',
     description: 'Classic three-card Teen Patti against computer opponents, with blind and seen play, chaal, pack and show.',
     usp: 'Authentic hand rankings (Trail to High Card) with a built-in rankings card.',
@@ -172,7 +172,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'Player-vs-player style; no rake.',
   },
   {
-    n: 11, id: 'andar-bahar', title: 'Andar Bahar', env: LNG, category: 'Card & Social', age: '18+',
+    n: 11, id: 'andar-bahar', title: 'Andar Bahar', env: LNG, category: 'Card & Social', age: '21+',
     tagline: 'Diya Lane: inside or outside?',
     description: 'A joker card is revealed and cards are dealt alternately to Andar and Bahar until one matches its rank.',
     usp: 'Fast, readable rounds with an exact-probability side panel.',
@@ -185,7 +185,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'About 97.8% RTP each side (simulation-verified; see docs).',
   },
   {
-    n: 12, id: 'dragon-tiger', title: 'Dragon Tiger', env: LNG, category: 'Card & Social', age: '18+',
+    n: 12, id: 'dragon-tiger', title: 'Dragon Tiger', env: LNG, category: 'Card & Social', age: '21+',
     tagline: 'Twin Temples: one card decides.',
     description: 'One card to Dragon, one to Tiger: the higher card wins. Ties return half of Dragon/Tiger bets.',
     usp: 'The fastest round in the Lounge, with clean slow-motion card reveals.',
@@ -198,7 +198,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'Dragon/Tiger ~96.27% RTP, Tie ~89.64% (8-deck shoe).',
   },
   {
-    n: 13, id: 'three-card-poker', title: 'Three Card Poker', env: LNG, category: 'Card & Social', age: '18+',
+    n: 13, id: 'three-card-poker', title: 'Three Card Poker', env: LNG, category: 'Card & Social', age: '21+',
     tagline: 'Triad Table: ante, play, and a Pair Plus side bet.',
     description: 'Play your three cards against the dealer. The dealer qualifies with Queen-high. Ante bonuses and Pair Plus pay by hand rank.',
     usp: 'Clear qualification banner and bonus table.',
@@ -211,7 +211,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'Ante/Play ~97.98% per unit wagered with Q-6-4 strategy (3.37% ante edge); Pair Plus ~97.7%.',
   },
   {
-    n: 14, id: 'video-poker', title: 'Video Poker', env: LNG, category: 'Card & Social', age: '18+',
+    n: 14, id: 'video-poker', title: 'Video Poker', env: LNG, category: 'Card & Social', age: '21+',
     tagline: 'Retro Jacks: hold, draw, decide.',
     description: 'Jacks or Better video poker with the full 9/6 paytable and a retro CRT cabinet.',
     usp: 'Paytable and theoretical RTP printed on the cabinet glass.',
@@ -224,7 +224,7 @@ export const CATALOGUE: GameMeta[] = [
     math: '99.54% RTP with optimal play (9/6 Jacks or Better, max bet).',
   },
   {
-    n: 15, id: 'classic-slots', title: 'Classic 3-Reel Slots', env: LNG, category: 'Slots', age: '18+',
+    n: 15, id: 'classic-slots', title: 'Classic 3-Reel Slots', env: LNG, category: 'Slots', age: '21+',
     tagline: 'Copper Sevens: three reels, one line, pure rhythm.',
     description: 'A copper-and-steel three-reel machine with one payline and published reel strips.',
     usp: 'Reel strips are public: every symbol count is listed in the info panel.',
@@ -237,7 +237,7 @@ export const CATALOGUE: GameMeta[] = [
     math: 'Exact RTP computed from reel strips (see docs/LOUNGE_MATH.md).',
   },
   {
-    n: 16, id: 'adventure-slots', title: 'Five-Reel Adventure Slots', env: LNG, category: 'Slots', age: '18+',
+    n: 16, id: 'adventure-slots', title: 'Five-Reel Adventure Slots', env: LNG, category: 'Slots', age: '21+',
     tagline: 'Lost Canyon Expedition: ten lines of discovery.',
     description: 'A 5x3 expedition-themed slot with 10 paylines, wild compasses and scatter idols.',
     usp: 'Line wins trace across the canyon with animated rope paths.',
@@ -249,7 +249,7 @@ export const CATALOGUE: GameMeta[] = [
     a11y: ['Win summary in text'], tags: ['slots'], math: 'Exact RTP computed by full enumeration.',
   },
   {
-    n: 17, id: 'vault-slots', title: 'Treasure Vault Slots', env: LNG, category: 'Slots', age: '18+',
+    n: 17, id: 'vault-slots', title: 'Treasure Vault Slots', env: LNG, category: 'Slots', age: '21+',
     tagline: 'Monsoon Vault: twenty lines behind steel doors.',
     description: 'A 5x3, 20-line vault heist slot with key scatters that unlock fixed-multiplier vault payouts.',
     usp: 'Vault doors open with a mechanical 3D-styled animation on scatter wins.',
@@ -261,7 +261,7 @@ export const CATALOGUE: GameMeta[] = [
     a11y: ['Text win summary'], tags: ['slots'], math: 'Exact RTP computed by full enumeration.',
   },
   {
-    n: 18, id: 'cosmic-reels', title: 'Cosmic Reels', env: LNG, category: 'Slots', age: '18+',
+    n: 18, id: 'cosmic-reels', title: 'Cosmic Reels', env: LNG, category: 'Slots', age: '21+',
     tagline: 'Nebula Ways: 243 ways across the stars.',
     description: 'A 5x3 all-ways slot: matching symbols on adjacent reels from the left pay, anywhere on each reel.',
     usp: '243 ways shown as glowing constellations between matching planets.',
@@ -273,7 +273,7 @@ export const CATALOGUE: GameMeta[] = [
     a11y: ['Text win summary'], tags: ['slots', 'space'], math: 'Exact RTP computed by full enumeration.',
   },
   {
-    n: 19, id: 'neon-fruit', title: 'Neon Fruit Machine', env: LNG, category: 'Slots', age: '18+',
+    n: 19, id: 'neon-fruit', title: 'Neon Fruit Machine', env: LNG, category: 'Slots', age: '21+',
     tagline: 'Neon Orchard: five lines of glowing fruit.',
     description: 'A 3x3 neon fruit machine with five paylines and fruit-salad scatter pays.',
     usp: 'Hand-tuned neon glow and synthwave sound design.',
@@ -285,7 +285,7 @@ export const CATALOGUE: GameMeta[] = [
     a11y: ['Reduced-motion glow'], tags: ['slots', 'retro'], math: 'Exact RTP computed by full enumeration.',
   },
   {
-    n: 20, id: 'mystery-jackpot', title: 'Mystery Jackpot Simulator', env: LNG, category: 'Slots', age: '18+',
+    n: 20, id: 'mystery-jackpot', title: 'Mystery Jackpot Simulator', env: LNG, category: 'Slots', age: '21+',
     tagline: 'Mystery Meteor: a fixed jackpot with published odds.',
     description: 'A three-reel slot with a fixed mystery jackpot. It triggers on any spin with a published 1-in-4,000 probability, independent of the reels, balance and history.',
     usp: 'Fixed, non-pooled jackpot with the trigger probability printed on screen.',
@@ -297,7 +297,7 @@ export const CATALOGUE: GameMeta[] = [
     a11y: ['Text summary'], tags: ['slots'], math: 'Exact RTP = reel RTP + 400/4000 jackpot contribution.',
   },
   {
-    n: 21, id: 'plinko', title: 'Plinko Simulator', env: LNG, category: 'Instant', age: '18+',
+    n: 21, id: 'plinko', title: 'Plinko Simulator', env: LNG, category: 'Instant', age: '21+',
     tagline: 'Peg Cascade: pure binomial physics.',
     description: 'Drop a ball through 8, 12 or 16 rows of pegs. Each peg sends it left or right with equal probability.',
     usp: 'Multiplier tables with exact binomial probabilities shown under each slot.',
@@ -309,7 +309,7 @@ export const CATALOGUE: GameMeta[] = [
     a11y: ['Result slot in text'], tags: ['instant'], math: 'Tables normalised to 98%; exact RTP after rounding is 97.76-98.19% and published per table.',
   },
   {
-    n: 22, id: 'dice-arena', title: 'Dice Arena', env: LNG, category: 'Instant', age: '18+',
+    n: 22, id: 'dice-arena', title: 'Dice Arena', env: LNG, category: 'Instant', age: '21+',
     tagline: 'Two dice, one arena, real 3D tumbles.',
     description: 'Bet on the total of two six-sided dice: under 7, exactly 7, over 7, or a specific double. The dice are rendered in 3D.',
     usp: 'WebGL 3D dice with physically eased tumbling.',
@@ -321,7 +321,7 @@ export const CATALOGUE: GameMeta[] = [
     a11y: ['Dice values as text'], tags: ['dice', '3d'], math: 'Under/Over 97.92%, Seven 96.67%, Doubles 97.22%.',
   },
   {
-    n: 23, id: 'hi-lo', title: 'Hi-Lo Cards', env: LNG, category: 'Instant', age: '18+',
+    n: 23, id: 'hi-lo', title: 'Hi-Lo Cards', env: LNG, category: 'Instant', age: '21+',
     tagline: 'Hi-Lo Express: higher or lower?',
     description: 'Predict whether the next card is higher or lower. Each correct call multiplies your stake by a fair-priced multiplier with a 2% edge. Bank whenever you like.',
     usp: 'Each choice shows its exact win probability and multiplier before you commit.',
@@ -333,7 +333,7 @@ export const CATALOGUE: GameMeta[] = [
     a11y: ['Probabilities in text'], tags: ['cards', 'instant'], math: '98% RTP at every step.',
   },
   {
-    n: 24, id: 'mines', title: 'Mines Simulator', env: LNG, category: 'Instant', age: '18+',
+    n: 24, id: 'mines', title: 'Mines Simulator', env: LNG, category: 'Instant', age: '21+',
     tagline: 'Gem Mines: twenty-five tiles, hidden mines.',
     description: 'Reveal gems on a 5x5 grid while avoiding hidden mines. Mine positions are committed by hash before you start.',
     usp: 'Commit-reveal fairness: the mine layout hash is shown before play and the layout is revealed after.',
@@ -345,7 +345,7 @@ export const CATALOGUE: GameMeta[] = [
     a11y: ['Tile state labelled'], tags: ['instant'], math: '98% RTP at every bank point.',
   },
   {
-    n: 25, id: 'crash-flight', title: 'Crash Flight Simulator', env: LNG, category: 'Instant', age: '18+',
+    n: 25, id: 'crash-flight', title: 'Crash Flight Simulator', env: LNG, category: 'Instant', age: '21+',
     tagline: 'Skyline Flight: bank before the engine stalls.',
     description: 'A multiplier climbs as your jet gains altitude. Bank before the stall point, which is fixed by the server at take-off.',
     usp: 'The stall point is committed by hash at take-off and revealed after landing.',
@@ -688,4 +688,4 @@ export const CATALOGUE: GameMeta[] = [
 export const BY_ID: Record<string, GameMeta> = Object.fromEntries(CATALOGUE.map((g) => [g.id, g]));
 export const FAMILY = CATALOGUE.filter((g) => g.env === 'family');
 export const LOUNGE = CATALOGUE.filter((g) => g.env === 'lounge');
-export const AGE_MIN: Record<GameMeta['age'], number> = { '6+': 6, '8+': 8, '10+': 10, '12+': 12, '18+': 18 };
+export const AGE_MIN: Record<GameMeta['age'], number> = { '6+': 6, '8+': 8, '10+': 10, '12+': 12, '21+': 21 };

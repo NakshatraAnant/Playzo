@@ -4,7 +4,13 @@ import { db, nowIso } from './db';
 import { config } from './config';
 import { HttpError, User, currentUser, requireUser, str, rateLimit, audit, SESSION_COOKIE } from './http';
 import { sha256, randomToken, newId } from './secureRng';
-import { ageOn, bandFor, loungeAccess, socialPolicy, AGE_ASSURANCE_PROVIDERS, isQaPreview } from './access';
+import { ageOn, bandFor, loungeAccess, socialPolicy, AGE_ASSURANCE_PROVIDERS, isQaPreview, loungeAgeOk, agePolicyFor } from './access';
+import { PREF_KEYS } from '../shared/preferences';
+
+function sanitizePrefs(v: unknown): string[] {
+  return Array.isArray(v) ? [...new Set(v.filter((x): x is string => typeof x === 'string' && PREF_KEYS.includes(x)))] : [];
+}
+const prefsOf = (u: User) => { try { return sanitizePrefs(JSON.parse((u as any).preferences ?? '[]')); } catch { return []; } };
 import { balance } from './economy';
 import { track } from './analytics';
 import { sendEmail, emailStatus } from './email';
@@ -96,6 +102,7 @@ export function publicMe(u: User) {
     premium: !!(u.premium_until && u.premium_until > nowIso()), premiumUntil: u.premium_until, privacy: u.privacy_profile, allowFriendRequests: !!u.allow_friend_requests,
     balances: { ZO: balance(u.id, 'ZO'), ...(lounge.entitled ? { CHIPS: balance(u.id, 'CHIPS') } : {}) },
     lounge, social: socialPolicy(u), loungeDailyLimitMin: u.lounge_daily_limit_min,
+    preferences: prefsOf(u), onboarded: !u.is_guest,
   };
 }
 
@@ -127,6 +134,22 @@ export async function authRoutes(app: FastifyInstance) {
     return { user: publicMe(db().get<User>('SELECT * FROM users WHERE id = ?', id)!) };
   });
 
+  /**
+   * Onboarding step 1: what a date of birth allows. Nothing is stored; the server repeats the same
+   * calculation at registration and on every request, so the client cannot change the outcome.
+   */
+  app.post('/api/auth/age-check', async (req) => {
+    rateLimit(req, 'age-check', 30);
+    const p = agePolicyFor(validateDob((req.body as any)?.dob));
+    return {
+      canRegister: p.canRegister, band: p.band, loungeEligible: p.loungeEligible, loungeMinAge: p.loungeMinAge,
+      message: !p.canRegister ? 'PLAYZO accounts are for players aged 13 and over. You can still play every family game as a guest.'
+        : p.band === 'teen' ? 'You can play every family game, join friends and climb the leaderboards.'
+        : p.loungeEligible ? `Every family game is yours. You also meet the ${p.loungeMinAge}+ age requirement for the PLAYZO Lounge.`
+        : `Every family game is yours. The PLAYZO Lounge opens at ${p.loungeMinAge}.`,
+    };
+  });
+
   /** Registration (or guest upgrade, keeping progress). */
   app.post('/api/auth/register', async (req, reply) => {
     rateLimit(req, 'auth', 10);
@@ -139,6 +162,13 @@ export async function authRoutes(app: FastifyInstance) {
     const dob = validateDob(b.dob);
     if (b.acceptTerms !== true) throw new HttpError(400, 'Please accept the Terms and Privacy Policy', 'VALIDATION');
     const band = bandFor(ageOn(dob));
+    // Under-13 accounts stay closed until a verified parental-consent flow is enabled (guest play remains open).
+    if (band === 'child' && !config.allowUnder13) {
+      track('auth_under13_blocked', null);
+      throw new HttpError(403, 'PLAYZO accounts are for players aged 13 and over. You can still play every family game as a guest.', 'UNDER_13');
+    }
+    const avatar = typeof b.avatar === 'string' && /^orb-([1-6])$/.test(b.avatar) ? b.avatar : `orb-${1 + Math.floor(Math.random() * 6)}`;
+    const preferences = sanitizePrefs(b.preferences);
     let parentEmail: string | null = null;
     if (band === 'child') {
       parentEmail = str(b.parentEmail, 'Parent or guardian email', 5, 160).toLowerCase();
@@ -153,10 +183,11 @@ export async function authRoutes(app: FastifyInstance) {
     let id: string;
     if (guest && guest.is_guest) {
       id = guest.id;
-      db().run('UPDATE users SET email=?, username=?, display_name=?, password_hash=?, is_guest=0, dob=?, age_band=?, parent_email=? WHERE id=?', email, username, display, hashPassword(password), dob, band, parentEmail, id);
+      db().run('UPDATE users SET email=?, username=?, display_name=?, password_hash=?, is_guest=0, dob=?, age_band=?, parent_email=?, preferences=?' + (b.avatar ? ', avatar=?' : '') + ' WHERE id=?',
+        ...[email, username, display, hashPassword(password), dob, band, parentEmail, JSON.stringify(preferences), ...(b.avatar ? [avatar] : []), id]);
     } else {
       id = newId('u_');
-      db().run('INSERT INTO users (id, email, username, display_name, password_hash, dob, age_band, parent_email, avatar) VALUES (?,?,?,?,?,?,?,?,?)', id, email, username, display, hashPassword(password), dob, band, parentEmail, `orb-${1 + Math.floor(Math.random() * 12)}`);
+      db().run('INSERT INTO users (id, email, username, display_name, password_hash, dob, age_band, parent_email, avatar, preferences) VALUES (?,?,?,?,?,?,?,?,?,?)', id, email, username, display, hashPassword(password), dob, band, parentEmail, avatar, JSON.stringify(preferences));
       createSession(reply, id, req);
     }
     db().run("INSERT INTO consents (user_id, kind, version) VALUES (?, 'terms', ?), (?, 'privacy', ?)", id, TERMS_VERSION, id, TERMS_VERSION);
@@ -288,7 +319,7 @@ export async function authRoutes(app: FastifyInstance) {
     const method = str((req.body as any)?.method, 'Method', 2, 40);
     const provider = AGE_ASSURANCE_PROVIDERS[method];
     if (!provider) throw new HttpError(400, 'Unknown verification method', 'VALIDATION');
-    if (u.is_guest || !u.dob || bandFor(ageOn(u.dob)) !== 'adult') throw new HttpError(403, 'Age assurance is only available to adult accounts', 'NOT_ADULT');
+    if (!loungeAgeOk(u)) throw new HttpError(403, `The PLAYZO Lounge is for players aged ${config.loungeMinAge} and over`, 'NOT_ADULT');
     // Certified providers must complete their own redirect/callback flow (see ageAssurance adapter); a bare POST never verifies anyone.
     if (provider.production) throw new HttpError(501, 'This provider must be completed through its verification flow', 'NOT_CONFIGURED');
     if (!provider.production && (!config.devMode || config.production)) throw new HttpError(503, 'No production age-assurance provider is configured', 'NOT_CONFIGURED');
@@ -304,7 +335,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post('/api/auth/lounge-terms', async (req) => {
     const u = requireUser(req);
-    if (u.age_band !== 'adult') throw new HttpError(403, 'Adults only', 'NOT_ADULT');
+    if (!loungeAgeOk(u)) throw new HttpError(403, `The PLAYZO Lounge is for players aged ${config.loungeMinAge} and over`, 'NOT_ADULT');
     if (!db().get("SELECT 1 FROM consents WHERE user_id = ? AND kind = 'lounge_terms'", u.id)) db().run("INSERT INTO consents (user_id, kind, version) VALUES (?, 'lounge_terms', ?)", u.id, TERMS_VERSION);
     return { ok: true };
   });
@@ -316,6 +347,12 @@ export async function authRoutes(app: FastifyInstance) {
       if (!['public', 'friends', 'private'].includes(b.privacy as string)) throw new HttpError(400, 'Bad privacy value', 'VALIDATION');
       const p = u.age_band === 'child' && b.privacy === 'public' ? 'friends' : b.privacy;
       db().run('UPDATE users SET privacy_profile = ? WHERE id = ?', p, u.id);
+    }
+    if (b.preferences !== undefined) db().run('UPDATE users SET preferences = ? WHERE id = ?', JSON.stringify(sanitizePrefs(b.preferences)), u.id);
+    if (b.displayName !== undefined && !u.is_guest && u.age_band !== 'child') {
+      const dn = str(b.displayName, 'Display name', 2, 24);
+      if (!/^[\p{L}\p{N} _.-]+$/u.test(dn)) throw new HttpError(400, 'Display names use letters, numbers, spaces, _ . -', 'VALIDATION');
+      db().run('UPDATE users SET display_name = ? WHERE id = ?', dn, u.id);
     }
     if (b.allowFriendRequests !== undefined) db().run('UPDATE users SET allow_friend_requests = ? WHERE id = ?', b.allowFriendRequests ? 1 : 0, u.id);
     if (b.loungeDailyLimitMin !== undefined) {
