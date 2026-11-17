@@ -17,6 +17,7 @@ import { adminRoutes } from './admin';
 import { notifyRoutes } from './notify';
 import { rewardRoutes } from './rewards';
 import { supportRoutes } from './support';
+import { fairPlayRoutes } from './fairplay';
 import { retryDueEmails, emailStatus } from './email';
 import { startAutoBackups, latestBackup } from './backup';
 import { seoRoutes } from './seo';
@@ -85,6 +86,7 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   await app.register(notifyRoutes);
   await app.register(rewardRoutes);
   await app.register(supportRoutes);
+  await app.register(fairPlayRoutes);
 
   app.all('/api/*', async (_req, reply) => reply.code(404).send({ error: 'Not found', code: 'NOT_FOUND' }));
 

@@ -189,3 +189,31 @@ export function Errors() {
     </div>
   );
 }
+
+/** Fair play: replay runs flagged by behavioural signals; their leaderboard entries are held until reviewed. */
+export function FairPlay() {
+  const { toast } = useStore();
+  const [status, setStatus] = useState('flagged');
+  const { data, reload } = useAsync(() => api.get(`/api/admin/reviews?status=${status}`), [status]);
+  if (!data) return <div className="spinner" />;
+  const decide = async (id: string, decision: string) => { try { await api.post(`/api/admin/reviews/${id}`, { decision }); toast(decision === 'clear' ? 'Score restored' : 'Score removed', 'ok'); reload(); } catch (e: any) { toast(e.message, 'bad'); } };
+  return (
+    <div className="stack">
+      <div className="row wrap" style={{ gap: 10 }}>
+        <div className="seg">{['flagged', 'cleared', 'removed'].map((s) => <button key={s} className={status === s ? 'on' : ''} onClick={() => setStatus(s)}>{s}</button>)}</div>
+        <span className="dim" style={{ fontSize: 13 }}>Runs scoring {data.threshold}+ on scripted-play signals are held from leaderboards (XP is kept) until reviewed.</span>
+      </div>
+      {data.runs.length ? (
+        <div className="table-wrap"><table className="data"><thead><tr><th>When</th><th>Player</th><th>Game</th><th>Score</th><th>Bot score</th><th>Signals</th><th></th></tr></thead><tbody>
+          {data.runs.map((r: any) => {
+            let sig: any = {};
+            try { sig = JSON.parse(String(r.review_note).split(' | ')[0]); } catch { /* note only */ }
+            return <tr key={r.id}><td>{r.started_at.slice(0, 16)}</td><td>{r.username}</td><td>{r.game_id}</td><td className="mono">{r.score}</td><td><Chip tone={r.bot_score >= 80 ? 'bad' : 'warn'}>{r.bot_score}</Chip></td>
+              <td className="dim" style={{ fontSize: 12 }}>{sig.inputs !== undefined ? `${sig.inputs} inputs · timing variation ${sig.cv?.toFixed(3)} · fast ${(sig.fastShare * 100).toFixed(0)}% · repeated ${(sig.repeatShare * 100).toFixed(0)}%` : ''}</td>
+              <td>{r.review_status === 'flagged' && <><button className="btn btn-sm" onClick={() => decide(r.id, 'clear')}>Clear</button> <button className="btn btn-sm btn-danger" onClick={() => decide(r.id, 'remove')}>Remove score</button></>}</td></tr>;
+          })}
+        </tbody></table></div>
+      ) : <Empty icon="shield" title="Nothing to review">No runs in this state.</Empty>}
+    </div>
+  );
+}

@@ -19,6 +19,7 @@ import { canPlay, loungeAccess } from './access';
 import { balance, post, dailyChipsTopUp } from './economy';
 import { recordCompletion, dailyPuzzle, CompletionOutput } from './progression';
 import { track } from './analytics';
+import { reviewRun } from './fairplay';
 
 export type Context = 'solo' | 'daily' | 'challenge' | 'race';
 interface SessionRow {
@@ -246,6 +247,7 @@ export async function submit(u: User, id: string, body: { actions?: unknown; con
       // Store a compact copy of the verified log for audits (capped).
       db().run(ins, row.id, 0, JSON.stringify(actions.slice(0, 5000)), Date.now());
       completion = complete(u, row, engine, state);
+      reviewRun(row.id, actions as any[]);
     });
     const res = engine.result(state);
     return { verified: true, score: Math.max(0, Math.round(res.scores[SOLO] ?? 0)), result: res, completion };

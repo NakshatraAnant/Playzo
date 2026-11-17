@@ -3,11 +3,11 @@ import { api } from '../lib/api';
 import { useAsync, useStore } from '../lib/store';
 import { Chip, Empty, Modal, useTitle } from '../components/ui';
 import { Icon } from '../components/Icon';
-import { Rooms, Content, Legal, Emails, System, Errors } from './AdminExtra';
+import { Rooms, Content, Legal, Emails, System, Errors, FairPlay } from './AdminExtra';
 import { SupportAdmin } from './AdminSupport';
 import { Analytics } from './AdminAnalytics';
 
-const TABS = ['Overview', 'Analytics', 'Users', 'Support', 'Reports', 'Games', 'Rooms', 'Content', 'Economy', 'Legal', 'Emails', 'Ads', 'System', 'Errors', 'Compliance', 'Audit'] as const;
+const TABS = ['Overview', 'Analytics', 'Users', 'Support', 'Reports', 'Fair play', 'Games', 'Rooms', 'Content', 'Economy', 'Legal', 'Emails', 'Ads', 'System', 'Errors', 'Compliance', 'Audit'] as const;
 
 export default function Admin() {
   useTitle('Admin');
@@ -22,6 +22,7 @@ export default function Admin() {
       {tab === 'Analytics' && <Analytics />}
       {tab === 'Users' && <Users />}
       {tab === 'Support' && <SupportAdmin />}
+      {tab === 'Fair play' && <FairPlay />}
       {tab === 'Reports' && <Reports />}
       {tab === 'Games' && <Games />}
       {tab === 'Rooms' && <Rooms />}

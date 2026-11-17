@@ -229,7 +229,7 @@ export function leaderboard(gameId: string, scope: 'week' | 'daily' | 'all', vie
   }
   const rows = db().all<{ user_id: string; best: number; display_name: string; avatar: string; level: number; privacy_profile: string }>(
     `SELECT s.user_id, MAX(s.score) AS best, u.display_name, u.avatar, u.level, u.privacy_profile
-     FROM scores s JOIN users u ON u.id = s.user_id WHERE ${where} AND u.status = 'active' GROUP BY s.user_id ORDER BY best DESC LIMIT ?`,
+     FROM scores s JOIN users u ON u.id = s.user_id WHERE ${where} AND s.held = 0 AND u.status = 'active' GROUP BY s.user_id ORDER BY best DESC LIMIT ?`,
     ...params, limit,
   );
   return rows.map((r, i) => ({

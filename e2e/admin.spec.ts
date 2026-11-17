@@ -2,7 +2,7 @@
 import { test, expect } from '@playwright/test';
 import { watchErrors, loginVia, registerVia, uniq } from './helpers';
 
-const TABS = ['Overview', 'Analytics', 'Users', 'Support', 'Reports', 'Games', 'Rooms', 'Content', 'Economy', 'Legal', 'Emails', 'Ads', 'System', 'Errors', 'Compliance', 'Audit'];
+const TABS = ['Overview', 'Analytics', 'Users', 'Support', 'Reports', 'Fair play', 'Games', 'Rooms', 'Content', 'Economy', 'Legal', 'Emails', 'Ads', 'System', 'Errors', 'Compliance', 'Audit'];
 
 test('admin can open every tab; Legal records cannot open a game', async ({ browser }) => {
   const ctx = await browser.newContext();
