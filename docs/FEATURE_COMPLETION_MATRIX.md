@@ -26,6 +26,8 @@ Evidence: `U` unit/engine tests · `I` API integration tests · `W` WebSocket te
 | Admin analytics dashboard: DAU/WAU, homepage visits, starts/completions, guest→registration, first-game completion, D1/D7, sessions per user, games per session, rooms, invitation acceptance, challenge completion, game load time, crash-free sessions, support requests; charts and 7/14/30/90-day filter | COMPLETE | I, E | First-party data only |
 | Backup verify (restore test) and staged restore with safety copy | COMPLETE | I | |
 | Startup integrity check, graceful shutdown, error monitoring tab | COMPLETE | I | |
+| Fair-play bot scoring + review queue | COMPLETE | I (fairplay.test.ts) | Held leaderboard entries until review |
+| PostgreSQL export / migration path | PARTIAL | I (translation) | Not loaded into a real PostgreSQL server (none available) |
 | Multiplayer load test | COMPLETE | script | 300 concurrent players, 0 errors (QA_TEST_REPORT.md) |
 
 ## Accounts and access
@@ -40,7 +42,7 @@ Evidence: `U` unit/engine tests · `I` API integration tests · `W` WebSocket te
 | Password reset / account recovery | PARTIAL | I, E | Same as above |
 | Account deletion (permanent, cascading) | COMPLETE | I, E | |
 | Role-based access (user, tester, support, admin) | COMPLETE | I, E | |
-| Google / Apple sign-in | BLOCKED | I (returns 501) | Needs OAuth client credentials and a public redirect URL |
+| Google / Apple sign-in | COMPLETE (code) / BLOCKED (credentials) | I (oauth.test.ts, local stand-in provider) | Switch on by adding credentials; not yet run against Google or Apple |
 | Under-13 parental consent workflow | PARTIAL | I | Consent link works; parent email delivery blocked on provider |
 | Age bands enforced server-side (child / teen / adult / unknown) | COMPLETE | I, E | |
 

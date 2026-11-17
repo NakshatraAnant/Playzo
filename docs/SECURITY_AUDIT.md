@@ -26,6 +26,8 @@
 | S-14 | Age gating | Lounge eligibility was 18+ | Policy | **Changed** to 21+ by date of birth on every request; 18-20 get 404/403 on every Lounge route, API and session start (tests: api, journey e2e) |
 | S-15 | Children | Under-13 accounts could be created pending parental email that cannot be delivered locally | Policy | **Changed**: under-13 sign-up refused by default; nothing stored; guest play remains |
 | S-16 | Support | New ticket and admin endpoints | - | Owner-only ticket access (404 for others), staff-only queue (403), audited staff actions, length limits, rate limits |
+| S-17 | External sign-in | New Google/Apple flow | - | Authorization code + PKCE (S256), single-use state (10 min), nonce, JWKS signature + issuer/audience/expiry checks, relative-only redirect targets, no automatic merge into an existing account with the same email (account-takeover defence), age policy still applied to new accounts; the Apple form-post callback is the only CSRF-header exemption. Tested (oauth.test.ts) |
+| S-18 | Score integrity | Scripted bots could stay within replay timing limits | Medium | **Mitigated**: behavioural scoring + held leaderboard entries + audited staff review (fairplay.test.ts) |
 | S-11 | Admin | Admin role changes, room closures, score removals, legal records, email retries and content flags | - | All server-side role-checked (`requireRole`) and audited. e2e: every admin endpoint returns 403 for normal users |
 
 ## Attack checklist

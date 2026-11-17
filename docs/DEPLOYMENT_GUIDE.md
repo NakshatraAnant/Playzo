@@ -36,6 +36,7 @@ Migrations run automatically when the API starts (`server/migrations/*.sql`, app
 | `npm run build` | Client build + SEO prerender + pre-compression into `dist/` |
 | `npm start` | Production mode: one Node process serving `dist/` + API (dev-only features refused) |
 | `npm run backup:db` | Online database backup (`VACUUM INTO`) to `data/backups/`, keeps the latest 14. Backups also run automatically once a day while the API is running (`PLAYZO_AUTO_BACKUP=false` to disable) |
+| `npm run export:postgres` | Write a PostgreSQL schema + data load of the live database to `data/postgres-export/` (gitignored; contains personal data) |
 | `npm run loadtest [rooms] [moves]` | Multiplayer load test against an isolated in-memory server (default 50 rooms) |
 | `npm run gdd` / `npm run rtp` | Regenerate game docs / print Lounge mathematics |
 

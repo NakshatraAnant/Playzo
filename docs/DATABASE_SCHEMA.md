@@ -67,3 +67,13 @@ PostgreSQL mapping for 002: `TEXT` JSON columns → `jsonb`; triggers → `CREAT
 - **Restore:** Admin → System → Restore (type RESTORE) stages `data/restore-request.json`. At the next start the server first saves the current database as `pre-restore-<time>.db`, then swaps in the backup, then runs migrations. Nothing is ever deleted. Tested in `tests/journey.test.ts`.
 - **Startup validation:** `PRAGMA quick_check` on every start; the result is in `/api/health` (`dbCheck`) and logged loudly if not `ok`.
 - **Graceful shutdown:** SIGINT/SIGTERM flush live rooms, checkpoint the WAL and close the database.
+
+## Migration 004_oauth_antibot.sql (additive)
+| Table / change | Purpose |
+|---|---|
+| `oauth_identities` (provider, subject) PK → user | Google/Apple sign-in identities; cascade-deleted with the account |
+| `game_sessions.bot_score`, `review_status`, `review_note` | Fair-play signals and staff decision for each verified replay run |
+| `scores.held` | 1 while a flagged run waits for review: hidden from every leaderboard |
+
+## PostgreSQL migration path
+`npm run export:postgres` writes `schema.sql` (tables in foreign-key order, identity columns, the case-insensitive username index and append-only triggers translated to PL/pgSQL) and `data.sql` (quoted INSERTs, sequence resets) to `data/postgres-export/`. The translation is covered by `tests/postgresExport.test.ts`; it has not been loaded into a real PostgreSQL server because none was available.

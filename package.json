@@ -23,7 +23,8 @@
     "test:all": "npm run typecheck && vitest run && playwright test",
     "local": "npm run build && npm run serve:local",
     "serve:local": "cross-env PLAYZO_SERVE_DIST=true PLAYZO_API_PORT=5757 tsx server/index.ts",
-    "loadtest": "tsx scripts/load-test.ts"
+    "loadtest": "tsx scripts/load-test.ts",
+    "export:postgres": "tsx scripts/export-postgres.ts"
   },
   "dependencies": {
     "@fastify/cookie": "^11.1.5",

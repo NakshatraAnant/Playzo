@@ -11,3 +11,5 @@ data/*.local.json
 test-results/
 playwright-report/
 docs/e2e-results.json
+data/postgres-export/
+data/restore-request.json*
