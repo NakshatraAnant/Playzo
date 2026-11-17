@@ -290,3 +290,25 @@ export function ProfileSettings() {
     </div>
   );
 }
+
+/* ---------------- settings: linked Google / Apple accounts ---------------- */
+export function LinkedAccounts() {
+  const { me, providers } = useStore();
+  const { data } = useAsync(() => (me && !me.isGuest ? api.get('/api/auth/identities') : Promise.resolve(null)), [me?.id]);
+  if (!me || me.isGuest || !data) return null;
+  const linked = (p: string) => data.identities.find((i: any) => i.provider === p);
+  return (
+    <div className="panel">
+      <div className="panel-title"><Icon name="link" /><h3>Linked sign-in</h3></div>
+      {(['google', 'apple'] as const).map((p) => (
+        <div key={p} className="row" style={{ gap: 10, padding: '6px 0', fontSize: 14 }}>
+          <b style={{ flex: 1 }}>{p === 'google' ? 'Google' : 'Apple'}</b>
+          {linked(p) ? <Chip tone="ok" icon="check">Linked{linked(p).email ? ` · ${linked(p).email}` : ''}</Chip>
+            : (providers as any)[p] ? <a className="btn btn-sm" href={`/api/auth/oauth/${p}/start?next=/settings`}>Link</a>
+            : <span className="dim">Not configured on this server</span>}
+        </div>
+      ))}
+      {!data.hasPassword && <p className="dim" style={{ fontSize: 12 }}>This account signs in with {data.identities.map((i: any) => i.provider).join(' / ')} only.</p>}
+    </div>
+  );
+}

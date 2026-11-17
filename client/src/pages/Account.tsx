@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { SecuritySettings, SoundSettings, ProfileSettings } from './Engage';
+import { SecuritySettings, SoundSettings, ProfileSettings, LinkedAccounts } from './Engage';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, trackEvent } from '../lib/api';
 import { useAsync, useStore } from '../lib/store';
@@ -22,7 +22,9 @@ function AuthCard({ title, children, sub }: { title: string; sub?: string; child
 
 function OAuthButtons() {
   const { providers, toast } = useStore();
-  const go = async (p: string) => { try { await api.get(`/api/auth/oauth/${p}`); } catch (e: any) { toast(e.message, 'bad'); } };
+  void toast;
+  // Full-page redirect to the provider; the server handles PKCE, state and nonce.
+  const go = (p: string) => { location.href = `/api/auth/oauth/${p}/start?next=${encodeURIComponent(new URLSearchParams(location.search).get('next') ?? '/')}`; };
   return (
     <div className="col" style={{ gap: 8 }}>
       <button type="button" className="btn btn-block" onClick={() => go('google')} disabled={!providers.google} title={providers.google ? '' : 'Not configured on this server'}>Continue with Google{!providers.google && ' (not configured)'}</button>
@@ -31,8 +33,18 @@ function OAuthButtons() {
   );
 }
 
+const OAUTH_ERRORS: Record<string, string> = {
+  cancelled: 'Sign-in was cancelled.',
+  expired: 'That sign-in took too long or was already used. Please try again.',
+  email_exists: 'An account with that email already exists. Sign in with your password, then link Google or Apple from Settings.',
+  exchange_failed: 'The sign-in provider did not confirm the login. Please try again.',
+  invalid_token: 'The sign-in could not be verified. Please try again.',
+  provider_error: 'The sign-in provider reported an error. Please try again.',
+};
+
 export function Login() {
   useTitle('Sign in');
+  const oauthErr = new URLSearchParams(location.search).get('oauth_error');
   const { setMe, ensureSession, providers } = useStore();
   const nav = useNavigate();
   const [sp] = useSearchParams();
@@ -47,6 +59,7 @@ export function Login() {
     <AuthCard title="Welcome back" sub="Sign in to sync your progress, friends and rewards.">
       <form className="col" onSubmit={submit}>
         {err && <div className="form-error" role="alert">{err}</div>}
+        {!err && oauthErr && <div className="form-error" role="alert">{OAUTH_ERRORS[oauthErr] ?? OAUTH_ERRORS.provider_error}</div>}
         <div className="field"><label htmlFor="id">Email or username</label><input id="id" className="input" autoComplete="username" value={f.identifier} onChange={(e) => setF({ ...f, identifier: e.target.value })} required /></div>
         <div className="field"><label htmlFor="pw">Password</label><input id="pw" type="password" className="input" autoComplete="current-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required /></div>
         <button className="btn btn-primary btn-lg btn-block" disabled={busy}>Sign in</button>
@@ -72,6 +85,12 @@ export function Register() {
   const [f, setF] = useState({ email: '', username: '', password: '', dob: '', parentEmail: '', acceptTerms: false, avatar: 'orb-1' });
   const [policy, setPolicy] = useState<{ canRegister: boolean; band: string; loungeEligible: boolean; message: string } | null>(null);
   const [tastes, setTastes] = useState<string[]>([]);
+  const oauthTicket = new URLSearchParams(location.search).get('oauth');
+  const [oauth, setOauth] = useState<{ provider: string; email: string | null } | null>(null);
+  useEffect(() => {
+    if (!oauthTicket) return;
+    api.get(`/api/auth/oauth/ticket/${oauthTicket}`).then((r) => { setOauth(r); if (r.email) setF((x) => ({ ...x, email: r.email })); }).catch((e) => setErr(e.message));
+  }, [oauthTicket]);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const checkAge = async (e: FormEvent) => {
@@ -87,7 +106,7 @@ export function Register() {
     e.preventDefault(); setErr(null); setBusy(true);
     try {
       const ref = new URLSearchParams(location.search).get('ref') ?? undefined;
-      const r = await api.post('/api/auth/register', { ...f, parentEmail: policy?.band === 'child' ? f.parentEmail : undefined, ref });
+      const r = await api.post('/api/auth/register', { ...f, password: oauth ? undefined : f.password, oauthTicket: oauth ? oauthTicket : undefined, parentEmail: policy?.band === 'child' ? f.parentEmail : undefined, ref });
       setMe(r.user); trackEvent('onboarding_complete', { band: r.user.ageBand });
       setStep('tastes');
     } catch (x: any) { setErr(x.message); } finally { setBusy(false); }
@@ -119,9 +138,10 @@ export function Register() {
       {step === 'account' && (
         <form className="col" onSubmit={submit}>
           {policy && <p className="muted" style={{ fontSize: 14 }}>{policy.message}</p>}
-          <div className="field"><label htmlFor="em">Email</label><input id="em" type="email" className="input" autoComplete="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required /></div>
+          {oauth && <div className="lounge-banner" style={{ margin: 0 }}><Icon name="check" />Signed in with {oauth.provider === 'google' ? 'Google' : 'Apple'}. Choose a username to finish.</div>}
+          <div className="field"><label htmlFor="em">Email</label><input id="em" type="email" className="input" autoComplete="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required readOnly={!!oauth?.email} /></div>
           <div className="field"><label htmlFor="un">Username</label><input id="un" className="input" autoComplete="username" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value.replace(/[^A-Za-z0-9_]/g, '') })} minLength={3} maxLength={20} required /><span className="hint">Letters, numbers and _ . Don't use your real name.</span></div>
-          <div className="field"><label htmlFor="pw">Password</label><input id="pw" type="password" className="input" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} minLength={8} required /><span className="hint">At least 8 characters.</span></div>
+          {!oauth && <div className="field"><label htmlFor="pw">Password</label><input id="pw" type="password" className="input" autoComplete="new-password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} minLength={8} required /><span className="hint">At least 8 characters.</span></div>}
           <div className="field"><span className="label-text">Choose your avatar</span>
             <div className="row wrap" role="radiogroup" aria-label="Avatar" style={{ gap: 8 }}>
               {['orb-1', 'orb-2', 'orb-3', 'orb-4', 'orb-5', 'orb-6'].map((a) => (
@@ -273,6 +293,7 @@ export function Settings() {
       <ProfileSettings />
       <SoundSettings />
       <SecuritySettings />
+      <LinkedAccounts />
       <div className="panel">
         <div className="panel-title"><Icon name="shield" /><h3>Privacy</h3></div>
         <div className="field"><label htmlFor="pv">Who can see my profile and stats</label>

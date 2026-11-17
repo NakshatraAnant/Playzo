@@ -30,6 +30,10 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
   const app = Fastify({ logger: opts.logger ? { level: 'info', redact: ['req.headers.cookie', 'req.headers.authorization'] } : false, bodyLimit: 2 * 1024 * 1024, trustProxy: false });
   await app.register(cookie);
   await app.register(websocket, { options: { maxPayload: 16 * 1024 } });
+  // Form posts are only used by the Apple sign-in callback.
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string', bodyLimit: 16 * 1024 }, (_req, body, done) => {
+    try { done(null, Object.fromEntries(new URLSearchParams(String(body)))); } catch (e) { done(e as Error, undefined); }
+  });
 
   // Security headers on every response.
   app.addHook('onSend', async (_req, reply, payload) => {
@@ -48,7 +52,9 @@ export async function buildApp(opts: { logger?: boolean } = {}): Promise<Fastify
 
   // CSRF defence: state-changing API calls must carry a custom header (forces a CORS preflight cross-site; no CORS is enabled).
   app.addHook('onRequest', async (req, reply) => {
-    if (req.url.startsWith('/api/') && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers['x-playzo'] !== '1') {
+    // Exception: the Apple sign-in callback is a cross-site form POST by design; it is protected by single-use state + PKCE + nonce.
+    const oauthCallback = /^\/api\/auth\/oauth\/apple\/callback(\?|$)/.test(req.url);
+    if (req.url.startsWith('/api/') && !oauthCallback && !['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers['x-playzo'] !== '1') {
       return reply.code(403).send({ error: 'Missing request header', code: 'CSRF' });
     }
   });

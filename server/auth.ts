@@ -15,6 +15,7 @@ import { balance } from './economy';
 import { track } from './analytics';
 import { sendEmail, emailStatus } from './email';
 import { notify, prefsFor } from './notify';
+import { oauthRoutes, providerConfigured, peekOauthTicket, takeOauthTicket, linkIdentity } from './oauth';
 
 export const TERMS_VERSION = '2026-11';
 
@@ -126,7 +127,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.get('/api/auth/me', async (req) => {
     const u = currentUser(req);
     if (u) db().run('UPDATE users SET last_seen_at = ? WHERE id = ?', nowIso(), u.id);
-    return { user: u ? publicMe(u) : null, providers: { google: !!config.googleClientId, apple: !!config.appleClientId, devMode: config.devMode, email: emailStatus().configured } };
+    return { user: u ? publicMe(u) : null, providers: { google: providerConfigured('google'), apple: providerConfigured('apple'), devMode: config.devMode, email: emailStatus().configured } };
   });
 
   /** Guest play: no personal data. Treated with child-safe defaults until upgraded. */
@@ -164,7 +165,10 @@ export async function authRoutes(app: FastifyInstance) {
     const b = (req.body ?? {}) as Record<string, unknown>;
     const email = str(b.email, 'Email', 5, 160).toLowerCase();
     if (!validEmail(email)) throw new HttpError(400, 'Enter a valid email', 'VALIDATION');
-    const password = str(b.password, 'Password', 8, 128);
+    // Players arriving from Google/Apple finish sign-up here (date of birth + username) without a password.
+    const oauthPeek = typeof b.oauthTicket === 'string' ? peekOauthTicket(b.oauthTicket) : null;
+    if (b.oauthTicket !== undefined && !oauthPeek) throw new HttpError(400, 'This sign-in has expired. Please start again.', 'OAUTH_EXPIRED');
+    const password = oauthPeek ? null : str(b.password, 'Password', 8, 128);
     const username = str(b.username, 'Username', 3, 20);
     if (!validUsername(username)) throw new HttpError(400, 'Usernames use letters, numbers and _ (3-20)', 'VALIDATION');
     const dob = validateDob(b.dob);
@@ -182,7 +186,7 @@ export async function authRoutes(app: FastifyInstance) {
       parentEmail = str(b.parentEmail, 'Parent or guardian email', 5, 160).toLowerCase();
       if (!validEmail(parentEmail) || parentEmail === email) throw new HttpError(400, 'Enter a different, valid parent or guardian email', 'VALIDATION');
     }
-    const pwHash = await hashPassword(password);
+    const pwHash = password ? await hashPassword(password) : null;
     if (db().get('SELECT 1 FROM users WHERE email = ?', email)) throw new HttpError(409, 'An account with this email already exists', 'EMAIL_TAKEN');
     const existingName = db().get<{ id: string }>('SELECT id FROM users WHERE username = ?', username);
     const guest = currentUser(req);
@@ -198,6 +202,11 @@ export async function authRoutes(app: FastifyInstance) {
       id = newId('u_');
       db().run('INSERT INTO users (id, email, username, display_name, password_hash, dob, age_band, parent_email, avatar, preferences) VALUES (?,?,?,?,?,?,?,?,?,?)', id, email, username, display, pwHash, dob, band, parentEmail, avatar, JSON.stringify(preferences));
       createSession(reply, id, req);
+    }
+    if (oauthPeek) {
+      const t = takeOauthTicket(b.oauthTicket)!;
+      linkIdentity(id, t);
+      if (t.email && t.email === email) db().run('UPDATE users SET email_verified_at = ? WHERE id = ?', nowIso(), id); // provider verified it
     }
     db().run("INSERT INTO consents (user_id, kind, version) VALUES (?, 'terms', ?), (?, 'privacy', ?)", id, TERMS_VERSION, id, TERMS_VERSION);
     const vt = issueToken(id, 'verify_email', 48);
@@ -379,13 +388,7 @@ export async function authRoutes(app: FastifyInstance) {
     return { user: publicMe(db().get<User>('SELECT * FROM users WHERE id = ?', u.id)!) };
   });
 
-  /** OAuth: only enabled when real credentials are configured (none in this local build). */
-  app.get('/api/auth/oauth/:provider', async (req) => {
-    const p = (req.params as any).provider;
-    const id = p === 'google' ? config.googleClientId : p === 'apple' ? config.appleClientId : '';
-    if (!id) throw new HttpError(501, `${p} sign-in is not configured on this server`, 'NOT_CONFIGURED');
-    throw new HttpError(501, 'OAuth redirect flow requires deployment configuration (see DEPLOYMENT_GUIDE.md)', 'NOT_CONFIGURED');
-  });
+  await oauthRoutes(app, { createSession });
 
   /** Active sign-in sessions (device label only) and revocation. */
   app.get('/api/auth/sessions', async (req) => {
