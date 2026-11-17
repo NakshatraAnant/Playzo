@@ -82,7 +82,8 @@ test.describe('replay-verified family games', () => {
       }
       if (await settled()) {
         const submit = page.waitForResponse((r) => r.url().includes('/submit'));
-        await page.getByTestId('finish-run').click();
+        // If the run ends on its own in this instant (e.g. a crash in Obstacle Sprint), it submits by itself.
+        await page.getByTestId('finish-run').click({ timeout: 3000 }).catch(() => undefined);
         const res = await submit;
         expect(res.status(), await res.text()).toBe(200);
       }

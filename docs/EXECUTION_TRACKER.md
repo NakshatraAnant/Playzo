@@ -1,5 +1,13 @@
 # Execution Tracker
 
+## 2026-11-17 — remaining locally-buildable items
+| Item | Status |
+|---|---|
+| Google/Apple sign-in adapters (OIDC, PKCE) | COMPLETE in code; needs credentials to switch on |
+| Behavioural bot scoring + admin Fair play review | COMPLETE |
+| PostgreSQL export / migration path | COMPLETE as export; not loaded into PostgreSQL (none available) |
+| Everything else open in KNOWN_ISSUES.md | Needs outside credentials, vendors, legal approval, other browsers/devices or a pen-test firm |
+
 ## Ultimate brief (2026-11-15) — phase status
 Checkpoint tag: `checkpoint-ultimate-brief`. Local commits only.
 

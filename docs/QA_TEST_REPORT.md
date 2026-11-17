@@ -1,11 +1,11 @@
-# QA Test Report (2026-11-15, ultimate brief)
+# QA Test Report (2026-11-17)
 
 ## Summary
 | Check | Result |
 |---|---|
 | TypeScript (`npm run typecheck`) | Clean |
-| Unit, engine, statistical, API, WebSocket, performance and journey tests (`npm test`) | **200 / 200 passing** (11 files) |
-| Browser tests (`npm run test:e2e`, Playwright on Microsoft Edge) | **124 / 124 passing**: full run 98 passed, 2 failed and 24 skipped (a renamed 21+ button label in the Lounge test setup, and a duplicate ticket subject between the desktop and phone runs); both test fixes re-run: 36/36 |
+| Unit, engine, statistical, API, WebSocket, performance, journey, sign-in, fair-play and export tests (`npm test`) | **210 / 210 passing** (14 files) |
+| Browser tests (`npm run test:e2e`, Playwright on Microsoft Edge) | **124 / 124 passing**: full run 123 passed; the 1 failure was a test race (Obstacle Sprint ended on its own as the test clicked Finish), fixed and the 12 real-time games re-run 12/12 |
 | Multiplayer load test (`npm run loadtest`) | 300 concurrent players in 150 rooms: **0 errors**, move-to-update latency p50 50 ms, p95 71 ms, p99 74 ms; 200 players: p50 26 ms, p95 42 ms; 100 players: p50 18 ms, p95 25 ms (in-process, localhost; not a production capacity claim) |
 | Production build (`npm run build`) | Clean, no warnings; main bundle 127 KB gzip; 27 prerendered pages |
 | `npm audit` | 0 vulnerabilities |
@@ -23,6 +23,12 @@
 | `api.test.ts` | 25 | Auth, CSRF, guest upgrade, under-13 flow, sessions, replay verification, Lounge invisibility, **QA-role preview, two-key legal gate, verification expiry**, cool-off, ledger, shop, social safety, admin RBAC, deletion, SEO |
 | `platform.test.ts` | 15 | Login lockout, session list/revoke, password change signs out other devices, outbox honesty, referrals (no payout), notifications + preferences, daily reward, seasons, pause/resume (deadline shift, paused runs not ranked), append-only ledger/audit log |
 | `multiplayer.test.ts` | 7 | Two real WebSocket clients play to a result; emotes only; race rooms; **rooms restored after a simulated restart with the board intact and exactly one match record**; lobby reconnect; **cross-site WebSocket Origin rejected**; **quick match pairs two players, refuses guests, keeps adults and teens apart** |
+| `oauth.test.ts` | 4 | Google sign-in against a local stand-in provider: PKCE, single-use state, nonce/audience/issuer/expiry checks, open-redirect guard, no auto-merge by email, explicit linking, age policy on new accounts |
+| `fairplay.test.ts` | 5 | Human-like timing passes, scripted timing flagged, held leaderboard entries, staff clear/remove, audit |
+| `postgresExport.test.ts` | 1 | PostgreSQL translation of the full schema and safe data quoting |
+| `oauth.test.ts` | 4 | Google sign-in against a local stand-in provider: PKCE, single-use state, nonce/audience/issuer/expiry checks, open-redirect guard, no auto-merge by email, explicit linking, age policy on new accounts |
+| `fairplay.test.ts` | 5 | Human-like timing passes, scripted timing flagged, held leaderboard entries, staff clear/remove, audit |
+| `postgresExport.test.ts` | 1 | PostgreSQL translation of the full schema and safe data quoting |
 | `journey.test.ts` | 9 | Avatar and tastes at sign-up, taste-driven recommendations, home feed sections with real-only popularity, support ticket workflow and privacy, report tracking, analytics (staff-only, every metric), achievement notifications, backup restore with safety copy, admin-only restore, startup integrity check |
 | `performance.test.ts` | 3 | Chess AI reply time stays within its budget at every level |
 | `music.test.ts` | 9 | Soundtrack for all 50 games, unique deterministic themes, notes in key, adaptive layering, urgency, memory-game caps, calm Lounge audio, no win sounds for partial returns |
