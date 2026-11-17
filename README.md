@@ -4,6 +4,8 @@
 - **25 family games:** puzzles, word and knowledge games, strategy games against the computer, and live party games.
 - **25 PLAYZO Lounge simulations (18+):** built, tested and mathematically published, but **disabled until legal approval**.
 
+**Easiest:** double-click `start-playzo.cmd` (installs, builds if needed, starts http://localhost:5757 and opens it). Keep its window open while you play; `stop-playzo.cmd` stops it.
+
 ```bash
 npm install
 npm run local   # optimised build on http://localhost:5757 (or: npm run dev for live reload)

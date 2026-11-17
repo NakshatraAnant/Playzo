@@ -11,6 +11,9 @@ npm run dev                 # web http://localhost:5757  ·  API http://127.0.0.
 ```
 Migrations run automatically when the API starts (`server/migrations/*.sql`, applied once, in order, inside a transaction). They are additive only. Seed data is configuration only (ad placements + the optional admin from `.env`); **no fake players, scores or activity are ever seeded**.
 
+## Starting and stopping (Windows)
+Double-click **start-playzo.cmd** in the PLAYZO folder: it installs dependencies and builds on first run, starts the optimised server on http://localhost:5757 in its own window and opens the browser. Keep that window open while playing; close it or double-click **stop-playzo.cmd** to stop. If the server is not running, the browser shows a "Can't reach the PLAYZO server" page (service worker v2) rather than an old cached copy of the app.
+
 ## Two ways to run locally
 | Mode | Command | When to use |
 |---|---|---|
