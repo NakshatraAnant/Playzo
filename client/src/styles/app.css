@@ -354,3 +354,6 @@ section[id^="cat-"] { scroll-margin-top: 80px; }
 .chart circle { fill: var(--text); }
 .bar { flex: 1; height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--grad-zo); }
+.sound-unlock { animation: pulse-soft 1.6s ease-in-out infinite; border-color: rgba(255,176,32,.6); }
+@keyframes pulse-soft { 50% { box-shadow: 0 0 0 6px rgba(255,176,32,.15); } }
+@media (prefers-reduced-motion: reduce) { .sound-unlock { animation: none; } }

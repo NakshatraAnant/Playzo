@@ -39,7 +39,7 @@ const ordered: string[] = [];
 const visit = (n: string, seen = new Set<string>()) => { if (ordered.includes(n) || seen.has(n)) return; seen.add(n); for (const r of refs.get(n) ?? []) visit(r, seen); ordered.push(n); };
 for (const t of tables) visit(t.name);
 
-const schema: string[] = ['-- PLAYZO PostgreSQL schema (generated from SQLite by scripts/export-postgres.ts)', 'BEGIN;'];
+const schema: string[] = ['-- PLAYZO PostgreSQL schema (generated from SQLite by scripts/export-postgres.ts)', "-- Requires a UTF8 database: CREATE DATABASE playzo ENCODING 'UTF8' TEMPLATE template0;", 'BEGIN;'];
 for (const n of ordered) schema.push(toPg(tables.find((t) => t.name === n)!.sql) + ';');
 for (const ix of d.prepare("SELECT sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL").all() as { sql: string }[]) schema.push(ix.sql.replace(/CREATE (UNIQUE )?INDEX (IF NOT EXISTS )?/, 'CREATE $1INDEX IF NOT EXISTS ') + ';');
 schema.push(`CREATE UNIQUE INDEX IF NOT EXISTS users_username_ci ON users (lower(username));`);

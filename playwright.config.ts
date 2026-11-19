@@ -27,6 +27,12 @@ export default defineConfig({
   projects: [
     { name: 'desktop', use: { ...devices['Desktop Edge'], channel, viewport: { width: 1366, height: 860 } } },
     { name: 'mobile', use: { ...devices['Pixel 7'], channel, viewport: { width: 390, height: 844 } }, testMatch: /(smoke|family|auth|journey)\.spec\.ts/ },
+    // Cross-browser (only when E2E_ALL_BROWSERS=1; needs `npx playwright install firefox webkit`).
+    ...(process.env.E2E_ALL_BROWSERS ? [
+      { name: 'firefox', use: { ...devices['Desktop Firefox'], channel: undefined, viewport: { width: 1366, height: 860 } }, testMatch: /(smoke|auth|journey|music)\.spec\.ts/ },
+      { name: 'webkit', use: { ...devices['Desktop Safari'], channel: undefined, viewport: { width: 1366, height: 860 } }, testMatch: /(smoke|auth|journey|music)\.spec\.ts/ },
+      { name: 'iphone-webkit', use: { ...devices['iPhone 14'], channel: undefined }, testMatch: /(smoke|journey)\.spec\.ts/ },
+    ] : []),
   ],
   webServer: {
     command: 'npx concurrently -k -n api,web "npx tsx server/index.ts" "node scripts/wait-api.mjs && npx vite"',

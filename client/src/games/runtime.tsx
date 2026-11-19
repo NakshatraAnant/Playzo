@@ -9,7 +9,7 @@ import type { Difficulty } from '@shared/engine';
 import { SeededRng } from '@shared/rng';
 import { api, ApiError, serverNow, trackEvent } from '../lib/api';
 import { useStore } from '../lib/store';
-import { sfx, stinger, prefs, setPref, onPrefs } from '../lib/sound';
+import { sfx, stinger, prefs, setPref, onPrefs, audioBlocked, unlockAudio, onAudioState } from '../lib/sound';
 import { music } from '../lib/music';
 import { Icon } from '../components/Icon';
 import { Modal, Chip } from '../components/ui';
@@ -264,6 +264,21 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
     return true;
   }, [gameId, phase, submit]);
 
+  /** The server already completed this session (e.g. a late tick): show its final result, never an error or a blank screen. */
+  const recovering = useRef(false);
+  const recoverEnded = useCallback(async () => {
+    if (!session || recovering.current) return;
+    recovering.current = true;
+    try {
+      const r = await api.get(`/api/sessions/${session.sessionId}`);
+      if (r.status === 'completed' && r.result) {
+        setDone((d) => d ?? { score: Math.max(0, Math.round(r.score ?? r.result?.scores?.p1 ?? 0)), completion: null, result: r.result });
+        setPhase('done');
+      } else { setErr('This session has ended.'); setPhase('error'); }
+    } catch { setErr('This session has ended.'); setPhase('error'); }
+    finally { recovering.current = false; }
+  }, [session]);
+
   const act = useCallback(async (action: any) => {
     if (!session) return null;
     if (pausedAt.current !== null) return null;
@@ -274,17 +289,17 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
       setVersion((v) => v + 1);
       if (typeof r.chips === 'number') setChips(r.chips);
       if (r.over) {
-        setDone({ score: Math.max(0, Math.round(r.result?.scores?.p1 ?? 0)), completion: r.completion, result: r.result });
+        setDone((d) => (d?.completion ? d : { score: Math.max(0, Math.round(r.result?.scores?.p1 ?? 0)), completion: r.completion, result: r.result }));
         setTimeout(() => setPhase('done'), meta.env === 'family' ? 900 : 0);
         refresh();
       }
       return r;
     } catch (e: any) {
-      if (e instanceof ApiError && e.code === 'SESSION_ENDED') { setErr('This session has ended.'); setPhase('error'); }
+      if (e instanceof ApiError && e.code === 'SESSION_ENDED') { void recoverEnded(); }
       else if (action?.type !== 'tick') { toast(e.message, 'bad'); sfx.bad(); }
       throw e;
     } finally { if (action?.type !== 'tick') setBusy(false); }
-  }, [session, toast, refresh, meta.env]);
+  }, [session, toast, refresh, meta.env, recoverEnded]);
 
   // Adaptive soundtrack: quiet intro while loading/tutorial/countdown, full arrangement in play, stop at results.
   useEffect(() => {
@@ -378,6 +393,7 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
         {pausable && <button className="btn btn-ghost icon-btn" onClick={() => pause()} aria-label="Pause game" data-testid="pause"><Icon name="pause" /></button>}
         {session?.mode === 'replay' && phase === 'playing' && <button className="btn btn-sm btn-ghost" onClick={() => { if (confirm('Finish this run now and submit your score?')) { const end = END_ACTION[gameId] ?? { end: true }; if (!record(end)) submit(); } }} data-testid="finish-run"><Icon name="flag" size={14} />Finish</button>}
         {meta.env === 'family' && context === 'solo' && (phase === 'playing' || phase === 'done') && <button className="btn btn-ghost icon-btn" onClick={() => setConfirmRestart(true)} aria-label="Restart game" data-testid="restart"><Icon name="refresh" /></button>}
+        <SoundUnlock />
         <MusicToggle />
         <button className="btn btn-ghost icon-btn" onClick={() => setTutorialOpen(true)} aria-label="How to play"><Icon name="info" /></button>
       </div>
@@ -397,6 +413,7 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
           </CtlContext.Provider>
         )}
         {phase === 'submitting' && <div className="row muted"><div className="spinner" />Verifying your run on the server…</div>}
+        {phase === 'done' && !done && <div className="center" style={{ minHeight: 200 }}><div className="spinner" /><p className="dim">Loading your result…</p></div>}
         {phase === 'done' && done && (
           <>
             <Results meta={meta} score={done.score} completion={done.completion} result={done.result}
@@ -429,6 +446,21 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
 }
 
 /** Live room host: the server engine runs in the room; the component plays through the same Ctl contract. */
+/** Browsers block audio until the first interaction: offer a one-tap unlock instead of silent play. */
+export function SoundUnlock() {
+  const [blocked, setBlocked] = useState(false);
+  useEffect(() => {
+    const check = () => setBlocked(audioBlocked() && prefs.musicOn);
+    const t = setTimeout(check, 600);
+    const off = onAudioState(check);
+    const first = () => setTimeout(check, 50);
+    addEventListener('pointerdown', first, { once: true });
+    return () => { clearTimeout(t); off(); removeEventListener('pointerdown', first); };
+  }, []);
+  if (!blocked) return null;
+  return <button className="btn btn-sm sound-unlock" onClick={() => { unlockAudio(); sfx.select(); setBlocked(false); }} data-testid="sound-unlock"><Icon name="sound" size={14} />Tap for sound</button>;
+}
+
 /** In-game music on/off (remembered on this device). */
 export function MusicToggle() {
   const [on, setOn] = useState(prefs.musicOn);
@@ -475,11 +507,15 @@ export function useFrame(active: boolean): number {
 export function useServerTick(deadline: number | null | undefined, active: boolean) {
   const ctl = useCtl();
   const [, force] = useState(0);
+  const inFlight = useRef(false);
   useEffect(() => {
     if (!active) return;
     const id = setInterval(() => {
       force((x) => x + 1);
-      if (deadline && serverNow() > deadline + 150 && !ctl.room) ctl.act({ type: 'tick' }).catch(() => undefined);
+      if (deadline && serverNow() > deadline + 150 && !ctl.room && !ctl.over && !inFlight.current) {
+        inFlight.current = true;
+        ctl.act({ type: 'tick' }).catch(() => undefined).finally(() => { inFlight.current = false; });
+      }
     }, 250);
     return () => clearInterval(id);
   }, [deadline, active, ctl]);

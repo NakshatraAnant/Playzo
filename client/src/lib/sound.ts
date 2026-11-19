@@ -234,3 +234,19 @@ export function stinger(kind: 'victory' | 'defeat' | 'complete' | 'levelUp') {
     bell(659.25, 0.5, 0.1, 0, 2, 1.2, 0.35); bell(987.77, 0.7, 0.1, 0.12, 2, 1.2, 0.35);
   }
 }
+
+/** True when the browser is holding audio back until the first tap/click (autoplay policy). */
+export function audioBlocked(): boolean {
+  return !!ctx && ctx.state === 'suspended' && !document.hidden && !muted;
+}
+/** Resume audio inside a user gesture. */
+export function unlockAudio() {
+  const a = audio();
+  a?.resume().catch(() => undefined);
+}
+export function onAudioState(f: () => void) {
+  const a = audio();
+  if (!a) return () => undefined;
+  a.addEventListener('statechange', f);
+  return () => a.removeEventListener('statechange', f);
+}

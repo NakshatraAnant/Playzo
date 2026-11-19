@@ -188,3 +188,19 @@ describe('data integrity', () => {
 
 import { BY_ID } from '../shared/catalogue';
 function BY_ENV(id: string) { return BY_ID[id]?.env; }
+
+describe('timed game ending (regression: blank screen after Trivia Clash)', () => {
+  it('a late clock tick on a finished game returns the final result instead of an error', async () => {
+    const a = new Client(); await reg(a, 'latetick');
+    const s = await a.post('/api/sessions', { gameId: 'geo-sprint' });
+    db().run('UPDATE game_sessions SET state = json_set(state, \'$.endsAt\', 0, \'$.start\', 0) WHERE id = ?', s.body.sessionId);
+    const first = await a.post(`/api/sessions/${s.body.sessionId}/action`, { action: { type: 'tick' } });
+    expect(first.body.over).toBe(true);
+    expect(first.body.completion).toBeTruthy();
+    const late = await a.post(`/api/sessions/${s.body.sessionId}/action`, { action: { type: 'tick' } });
+    expect(late.status).toBe(200);
+    expect(late.body).toMatchObject({ over: true, completion: null });
+    // Real moves on a finished game are still refused.
+    expect((await a.post(`/api/sessions/${s.body.sessionId}/action`, { action: { type: 'answer', choice: 0 } })).status).toBe(409);
+  });
+});

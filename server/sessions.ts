@@ -137,6 +137,12 @@ function sanitizeConfig(c: unknown): Record<string, unknown> | undefined {
 export async function act(u: User, id: string, action: unknown) {
   return withLock(id, () => {
     const row = owned(u, id);
+    // A late clock tick on a finished game is harmless: answer with the final result (idempotent), not an error.
+    if (row.status === 'completed' && (action as any)?.type === 'tick' && row.mode === 'server' && row.state) {
+      const eng = ENGINES[row.game_id];
+      const st = JSON.parse(row.state);
+      return { view: eng.view(st, SOLO), over: row.env === 'family', completion: null, result: row.result ? JSON.parse(row.result) : eng.result(st), serverNow: Date.now() };
+    }
     if (row.status !== 'active') throw new HttpError(409, 'This session has ended', 'SESSION_ENDED');
     if (row.mode !== 'server') throw new HttpError(400, 'Submit replay games with /submit', 'VALIDATION');
     if (row.paused_at) throw new HttpError(409, 'This game is paused. Resume to continue.', 'PAUSED');
