@@ -81,7 +81,7 @@ Legend: **Impl** = implemented · **Test** = automated (A), manual browser QA (M
 ## Games
 | Requirement | Impl | Test | Issues |
 |---|---|---|---|
-| 25 family games with their own engine, UI, rules, scoring, tutorial, difficulty | Done | A (engines) + M (sample) | KI-7 |
+| 25 family games with their own engine, UI, rules, scoring, tutorial, difficulty | Done | A (engines; all 25 to game over) + A (browser; the 5 timed games played to the end) | - |
 | Replay verification for 12 real-time games | Done | A | KI-6 |
 | Server-authoritative play for 13 hidden-information / strategy games | Done | A | - |
 | AI opponents (chess, hex, connect five, territory) | Done | A | KI-9 |

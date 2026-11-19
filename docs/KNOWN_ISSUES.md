@@ -1,4 +1,4 @@
-# Known Issues and Limitations (2026-11-12)
+| KI-22 | Low | Browsers block audio until the first tap/click on the page, so a game opened directly by URL starts its music on the first interaction | Standard browser autoplay policy; a "Tap for sound" hint now shows in games while audio is blocked and disappears after the first tap | MITIGATED || KI-8 | Low | The running server uses SQLite, not PostgreSQL | `npm run verify:postgres` exports the database and loads it into a real PostgreSQL 17.5 server (embedded): 40 tables, row counts match, append-only triggers work. Switching the live data layer to PostgreSQL is still a separate change | PARTIAL || KI-7 | Resolved | Five server-timed family games were not played to their natural end in the browser tests | `e2e/timed.spec.ts` now plays Trivia Clash, Party Chaos, Geography Sprint, Emoji Decode and Word Duel to the results screen (5/5 pass on Edge). It found and fixed a real end-of-game race (two clock ticks at the deadline produced a blank/error screen) | FIXED |# Known Issues and Limitations (2026-11-19)
 
 | ID | Severity | Issue | Impact / workaround | Status |
 |---|---|---|---|---|
@@ -26,6 +26,7 @@
 | KI-23 | Info | Under-13 accounts are closed by default (product decision) because parental-consent emails cannot be delivered without an email provider | Set PLAYZO_ALLOW_UNDER13=true only after email delivery and a verified consent flow are in place | BLOCKED (credentials) |
 | KI-24 | Low | On Windows, more than ~300 simultaneous new connections in the same instant can overflow the OS connection queue | Normal arrival patterns are fine (300 concurrent players tested); use a reverse proxy/load balancer in production | OPEN |
 | KI-20 | Low | Certified age verification provider not integrated | Lounge fails closed: no non-QA adult can be verified | BLOCKED (vendor + legal) |
+| KI-25 | Info | The Claude desktop app's built-in browser pane cannot fetch service-worker scripts or let a service worker reach the network. A browser that had the old v1 worker there kept showing a stale cached page ("You appear to be offline", missing assets) | Not a PLAYZO defect: Edge/Chrome update the worker normally. v2 never serves cached pages. Fix in an affected browser: clear site data for localhost:5757 once | OPEN (environment) |
 
 ## Recommended next steps
 1. Legal review of gates G1-G8 (and record outcomes in Admin → Legal).

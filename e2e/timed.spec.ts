@@ -11,7 +11,8 @@ const CONTROLS = /pause|restart|how to play|music|sound|leave|back|resign|shuffl
 async function answerSomething(page: Page) {
   // Prefer real answer buttons (quiz games); fall back to any other enabled game button.
   const answers = page.locator('.stage-body button.answer:enabled');
-  if (await answers.count().catch(() => 0)) { await answers.first().click({ timeout: 1500 }).catch(() => undefined); return; }
+  // 5 s: the question panel animates in as the answers enable, and Playwright waits for the buttons to be stable.
+  if (await answers.count().catch(() => 0)) { await answers.first().click({ timeout: 5000 }).catch(() => undefined); return; }
   const buttons = page.locator('.stage-body button:enabled');
   const n = await buttons.count().catch(() => 0);
   for (let i = 0; i < n; i++) {

@@ -19,10 +19,10 @@ Status: **COMPLETE** = engine, rules, scoring, validation, UI, instructions, res
 | 29 | Logic Lock | replay | ✓ (solvable) | ✓ | ✓ | ✓ | race (WS test), async, daily | COMPLETE |
 | 30 | Sequence Master | replay | ✓ | ✓ | ✓ (natural end handled) | ✓ | race, async | COMPLETE |
 | 31 | Grid Genius | replay | ✓ (unique solution) | ✓ | ✓ | ✓ | race, async, daily | COMPLETE |
-| 32 | Code Breaker | server | ✓ (grading, redaction) | ✓ | ✓ input → restart | ✓ | async | COMPLETE |
-| 33 | Word Duel | server, timed | ✓ (dictionary, scoring) | ✓ | ✓ input → restart | ✓ (clock shifts) | versus, group, async, daily | COMPLETE |
-| 34 | Trivia Clash | server, timed | ✓ (deadline, redaction) | ✓ | ✓ input → restart | ✓ (clock shifts) | versus, 2v2 teams, group | COMPLETE |
-| 35 | Emoji Decode | server | ✓ (tolerant matching) | ✓ | ✓ input → restart | ✓ | async | COMPLETE |
+| 32 | Code Breaker | server | ✓ (grading, redaction) | ✓ | ✓ played to end + restart | ✓ | async | COMPLETE |
+| 33 | Word Duel | server, timed | ✓ (dictionary, scoring) | ✓ | ✓ played to end + restart | ✓ (clock shifts) | versus, group, async, daily | COMPLETE |
+| 34 | Trivia Clash | server, timed | ✓ (deadline, redaction) | ✓ | ✓ played to end + restart | ✓ (clock shifts) | versus, 2v2 teams, group | COMPLETE |
+| 35 | Emoji Decode | server | ✓ (tolerant matching) | ✓ | ✓ played to end + restart | ✓ | async | COMPLETE |
 | 36 | Word Ladder Race | server | ✓ (solvable ladders) | ✓ | ✓ played to results (route reveal) | ✓ | race, async, daily | COMPLETE |
 | 37 | Geography Sprint | server, timed | ✓ | ✓ | ✓ input → restart | ✓ (clock shifts) | async | COMPLETE |
 | 38 | Fact or Fiction | server | ✓ | ✓ | ✓ input → restart (key bug fixed) | ✓ | async | COMPLETE |
@@ -39,7 +39,7 @@ Status: **COMPLETE** = engine, rules, scoring, validation, UI, instructions, res
 | 49 | Obstacle Sprint | replay | ✓ (client sim == server replay) | ✓ | ✓ (natural end handled) | ✓ | race, async | COMPLETE |
 | 50 | Party Chaos | server, timed | ✓ | ✓ | ✓ input → restart | ✓ (clock shifts) | versus, 2v2 teams, group | COMPLETE |
 
-Gap (KI-7): for the five server-timed games the browser test does not wait out every round (minutes per game); their play-to-end path is automated at engine level with a simulated clock.
+Timed games in the browser: e2e/timed.spec.ts plays all five server-timed games (Word Duel, Trivia Clash, Emoji Decode, Geography Sprint, Party Chaos) to the results screen on Edge (5/5 pass, 2026-11-19). KI-7 is closed.
 
 ## Lounge (25) — built, tested, **disabled for the public** (legal status: BLOCKED for all)
 Browser column: internal QA account (tester role, localhost dev preview) opens the detail page with published maths, starts the game, completes one real round settled server-side through the ledger, and leaves (session closed, seed revealed).

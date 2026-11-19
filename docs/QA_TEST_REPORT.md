@@ -1,12 +1,14 @@
-# QA Test Report (2026-11-17)
+# QA Test Report (2026-11-19)
 
 ## Summary
 | Check | Result |
 |---|---|
 | TypeScript (`npm run typecheck`) | Clean |
-| Unit, engine, statistical, API, WebSocket, performance, journey, sign-in, fair-play and export tests (`npm test`) | **210 / 210 passing** (14 files) |
+| Unit, engine, statistical, API, WebSocket, performance, journey, sign-in, fair-play and export tests (`npm test`) | **211 / 211 passing** (14 files) |
 | Browser tests (`npm run test:e2e`, Playwright on Microsoft Edge) | **124 / 124 passing**: full run 123 passed; the 1 failure was a test race (Obstacle Sprint ended on its own as the test clicked Finish), fixed and the 12 real-time games re-run 12/12 |
 | Multiplayer load test (`npm run loadtest`) | 300 concurrent players in 150 rooms: **0 errors**, move-to-update latency p50 50 ms, p95 71 ms, p99 74 ms; 200 players: p50 26 ms, p95 42 ms; 100 players: p50 18 ms, p95 25 ms (in-process, localhost; not a production capacity claim) |
+| Timed games played to the end in the browser (`e2e/timed.spec.ts`) | **5 / 5 passing** on Edge: Trivia Clash, Party Chaos, Geography Sprint, Emoji Decode and Word Duel each reach the server-verified results screen with XP and an up-next suggestion. Found and fixed an end-of-game race (two deadline ticks → blank/error screen) |
+| PostgreSQL (`npm run verify:postgres`) | Export loaded into a real PostgreSQL 17.5 server (embedded): 40 tables, 294 rows, **0 row-count mismatches**, append-only ledger trigger rejects updates |
 | Production build (`npm run build`) | Clean, no warnings; main bundle 127 KB gzip; 27 prerendered pages |
 | `npm audit` | 0 vulnerabilities |
 | Restart | Stop/start verified: migrations 001+002 applied, 50 engines, Lounge locked, existing database kept, backup written |
@@ -21,13 +23,11 @@
 | `loungeRules.test.ts` | 33 | **Individual rule tests for all 25 Lounge games**: valid rounds fully ledgered, invalid actions rejected, stakes above balance refused, hidden information never in the view, reproducible for a fixed seed |
 | `fairness.test.ts` | 25 | Monte Carlo vs published RTP (z-tests), chi-square uniformity, exact slot RTP, crash distribution, outcome independence from balance |
 | `api.test.ts` | 25 | Auth, CSRF, guest upgrade, under-13 flow, sessions, replay verification, Lounge invisibility, **QA-role preview, two-key legal gate, verification expiry**, cool-off, ledger, shop, social safety, admin RBAC, deletion, SEO |
-| `platform.test.ts` | 15 | Login lockout, session list/revoke, password change signs out other devices, outbox honesty, referrals (no payout), notifications + preferences, daily reward, seasons, pause/resume (deadline shift, paused runs not ranked), append-only ledger/audit log |
+| `platform.test.ts` | 16 | Login lockout, session list/revoke, password change signs out other devices, outbox honesty, referrals (no payout), notifications + preferences, daily reward, seasons, pause/resume (deadline shift, paused runs not ranked), append-only ledger/audit log |
 | `multiplayer.test.ts` | 7 | Two real WebSocket clients play to a result; emotes only; race rooms; **rooms restored after a simulated restart with the board intact and exactly one match record**; lobby reconnect; **cross-site WebSocket Origin rejected**; **quick match pairs two players, refuses guests, keeps adults and teens apart** |
 | `oauth.test.ts` | 4 | Google sign-in against a local stand-in provider: PKCE, single-use state, nonce/audience/issuer/expiry checks, open-redirect guard, no auto-merge by email, explicit linking, age policy on new accounts |
 | `fairplay.test.ts` | 5 | Human-like timing passes, scripted timing flagged, held leaderboard entries, staff clear/remove, audit |
 | `postgresExport.test.ts` | 1 | PostgreSQL translation of the full schema and safe data quoting |
-| `oauth.test.ts` | 4 | Google sign-in against a local stand-in provider: PKCE, single-use state, nonce/audience/issuer/expiry checks, open-redirect guard, no auto-merge by email, explicit linking, age policy on new accounts |
-| `fairplay.test.ts` | 5 | Human-like timing passes, scripted timing flagged, held leaderboard entries, staff clear/remove, audit |
 | `postgresExport.test.ts` | 1 | PostgreSQL translation of the full schema and safe data quoting |
 | `journey.test.ts` | 9 | Avatar and tastes at sign-up, taste-driven recommendations, home feed sections with real-only popularity, support ticket workflow and privacy, report tracking, analytics (staff-only, every metric), achievement notifications, backup restore with safety copy, admin-only restore, startup integrity check |
 | `performance.test.ts` | 3 | Chess AI reply time stays within its budget at every level |
