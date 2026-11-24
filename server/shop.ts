@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { db, nowIso, dayKey } from './db';
-import { HttpError, requireUser, currentUser, audit, User } from './http';
+import { HttpError, requireUser, currentUser, rateLimit, audit, User } from './http';
+import { sha256 } from './secureRng';
 import { COSMETICS, COSMETIC_BY_ID, PLANS } from '../shared/cosmetics';
 import { post, balance } from './economy';
 import { socialPolicy } from './access';
@@ -92,7 +93,7 @@ export async function shopRoutes(app: FastifyInstance) {
     const audienceAdult = u?.age_band === 'adult';
     const rows = db().all<any>("SELECT * FROM ad_placements WHERE slot = ? AND enabled = 1 AND (env = 'family_teen_adult' OR (env = 'adult' AND ? = 1))", slot, audienceAdult ? 1 : 0);
     for (const p of rows) {
-      const key = u?.id ?? `anon:${req.ip}`;
+      const key = u?.id ?? `anon:${sha256(`${dayKey()}:${req.ip}`).slice(0, 24)}`; // never the raw address; changes daily
       const seen = db().get<{ count: number }>('SELECT count FROM ad_impressions WHERE user_id = ? AND placement_id = ? AND day = ?', key, p.id, dayKey())?.count ?? 0;
       if (seen >= p.frequency_cap_per_day) continue;
       db().run('INSERT INTO ad_impressions (user_id, placement_id, day, count) VALUES (?, ?, ?, 1) ON CONFLICT(user_id, placement_id, day) DO UPDATE SET count = count + 1', key, p.id, dayKey());
@@ -102,6 +103,7 @@ export async function shopRoutes(app: FastifyInstance) {
     return { ad: null };
   });
   app.post('/api/ads/:id/click', async (req) => {
+    rateLimit(req, 'ad-click', 20, 'ip');
     db().run('UPDATE ad_placements SET clicks = clicks + 1 WHERE id = ?', (req.params as any).id);
     return { ok: true };
   });

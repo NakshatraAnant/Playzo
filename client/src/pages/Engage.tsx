@@ -113,9 +113,9 @@ export function SeasonBoard() {
       {data.top.length === 0 ? <Empty icon="trophy" title="No standings yet">Play any family game to get on the board.</Empty> : (
         <ol className="board">
           {data.top.map((r: any) => (
-            <li key={r.userId} className={r.me ? 'me' : ''}>
+            <li key={r.rank} className={r.me ? 'me' : ''}>
               <span className="rank">{r.rank}</span><Avatar id={r.avatar} size={30} name={r.name} />
-              <Link to={`/u/${r.userId}`} style={{ flex: 1, fontWeight: 700 }}>{r.name}</Link>
+              {r.userId ? <Link to={`/u/${r.userId}`} style={{ flex: 1, fontWeight: 700 }}>{r.name}</Link> : <span style={{ flex: 1, fontWeight: 700 }}>{r.name}</span>}
               <span className="dim" style={{ fontSize: 12 }}>{r.games} games</span><b className="mono">{r.points.toLocaleString()}</b>
             </li>
           ))}
@@ -156,7 +156,7 @@ export function ReferralCard() {
   if (!data?.code) return null;
   const link = `${location.origin}/register?ref=${encodeURIComponent(data.code)}`;
   const share = async () => {
-    const text = 'Aaja PLAYZO pe khelte hain! 50 original games, live rooms with friends.';
+    const text = 'Aaja PLAYZO pe khelte hain! 25 original games, live rooms with friends.';
     if (navigator.share) await navigator.share({ title: 'PLAYZO', text, url: link }).catch(() => undefined);
     else { await navigator.clipboard?.writeText(`${text} ${link}`); toast('Invite link copied', 'ok'); }
   };

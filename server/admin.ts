@@ -18,6 +18,11 @@ import { ACHIEVEMENTS, DAILY_POOL, dailyMissions, weeklyMissions, seasonKey } fr
 import { COSMETICS, COSMETIC_BY_ID } from '../shared/cosmetics';
 
 const STAFF: User['role'][] = ['admin', 'support'];
+/** Staff can never suspend themselves, and only admins may act on other staff. */
+function staffGuard(actor: User, target: User) {
+  if (target.id === actor.id) throw new HttpError(403, 'You cannot change your own account here', 'FORBIDDEN');
+  if (STAFF.includes(target.role) && actor.role !== 'admin') throw new HttpError(403, 'Only admins can change staff accounts', 'FORBIDDEN');
+}
 
 export async function adminRoutes(app: FastifyInstance) {
   app.get('/api/admin/overview', async (req) => {
@@ -64,7 +69,7 @@ export async function adminRoutes(app: FastifyInstance) {
     if (!['active', 'suspended'].includes(status)) throw new HttpError(400, 'Status must be active or suspended', 'VALIDATION');
     const target = db().get<User>('SELECT * FROM users WHERE id = ?', id);
     if (!target) throw new HttpError(404, 'User not found', 'NOT_FOUND');
-    if (target.role === 'admin' && admin.role !== 'admin') throw new HttpError(403, 'Only admins can change admins', 'FORBIDDEN');
+    staffGuard(admin, target);
     db().run('UPDATE users SET status = ? WHERE id = ?', status, id);
     if (status === 'suspended') db().run('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL', nowIso(), id);
     audit(admin.id, 'admin.user_status', id, { status, reason: (req.body as any)?.reason });
@@ -75,7 +80,9 @@ export async function adminRoutes(app: FastifyInstance) {
     const admin = requireRole(req, ['admin']);
     const role = String((req.body as any)?.role);
     if (!['user', 'tester', 'support', 'admin'].includes(role)) throw new HttpError(400, 'Bad role', 'VALIDATION');
-    db().run('UPDATE users SET role = ? WHERE id = ? AND is_guest = 0', role, (req.params as any).id);
+    if ((req.params as any).id === admin.id) throw new HttpError(403, 'You cannot change your own role', 'FORBIDDEN');
+    const changed = db().run('UPDATE users SET role = ? WHERE id = ? AND is_guest = 0', role, (req.params as any).id).changes;
+    if (!Number(changed)) throw new HttpError(404, 'Registered player not found', 'NOT_FOUND');
     audit(admin.id, 'admin.user_role', (req.params as any).id, { role });
     return { ok: true };
   });
@@ -87,6 +94,7 @@ export async function adminRoutes(app: FastifyInstance) {
     const amount = Math.trunc(Number((req.body as any)?.amount));
     const reason = str((req.body as any)?.reason, 'Reason', 5, 200);
     if (!amount || Math.abs(amount) > 5000) throw new HttpError(400, 'Amount must be between -5000 and 5000', 'VALIDATION');
+    if (!db().get('SELECT 1 FROM users WHERE id = ?', id)) throw new HttpError(404, 'User not found', 'NOT_FOUND');
     const r = post(id, 'ZO', amount, 'admin_adjust', `admin:${admin.id}`, `admin-adjust:${newId()}`, null, { reason });
     audit(admin.id, 'admin.zo_adjust', id, { amount, reason });
     return { ok: true, balance: r.balance };
@@ -133,8 +141,9 @@ export async function adminRoutes(app: FastifyInstance) {
   app.get('/api/admin/ledger', async (req) => {
     requireRole(req, STAFF);
     const q = req.query as any;
+    const cur = ['ZO', 'CHIPS'].includes(q.currency) ? q.currency : null;
     return {
-      entries: db().all('SELECT l.*, u.username FROM ledger l LEFT JOIN users u ON u.id = l.user_id WHERE (? IS NULL OR l.currency = ?) ORDER BY l.created_at DESC LIMIT 200', q.currency ?? null, q.currency ?? null),
+      entries: db().all('SELECT l.*, u.username FROM ledger l LEFT JOIN users u ON u.id = l.user_id WHERE (? IS NULL OR l.currency = ?) ORDER BY l.created_at DESC LIMIT 200', cur, cur),
       // Suspicious activity: rejected replays and unusually high family earnings today.
       suspicious: {
         rejectedRuns: db().all("SELECT s.id, s.user_id, u.username, s.game_id, s.reject_reason, s.started_at FROM game_sessions s JOIN users u ON u.id = s.user_id WHERE s.status = 'rejected' ORDER BY s.started_at DESC LIMIT 50"),
@@ -214,6 +223,9 @@ export async function adminRoutes(app: FastifyInstance) {
   app.post('/api/admin/users/:id/revoke-sessions', async (req) => {
     const admin = requireRole(req, STAFF);
     const id = (req.params as any).id;
+    const target = db().get<User>('SELECT * FROM users WHERE id = ?', id);
+    if (!target) throw new HttpError(404, 'User not found', 'NOT_FOUND');
+    if (target.role === 'admin' && admin.role !== 'admin') throw new HttpError(403, 'Only admins can change admins', 'FORBIDDEN');
     const n = db().run('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL', nowIso(), id).changes;
     audit(admin.id, 'admin.revoke_sessions', id, { count: Number(n) });
     return { ok: true, revoked: Number(n) };

@@ -69,7 +69,7 @@ export function Discover() {
 
 export function GameDetail() {
   const { id = '' } = useParams();
-  const { me } = useStore();
+  const { me, ensureSession } = useStore();
   const nav = useNavigate();
   const { data, error, loading, reload } = useAsync(() => api.get(`/api/games/${id}`), [id, me?.id]);
   const meta = BY_ID[id];
@@ -85,7 +85,7 @@ export function GameDetail() {
   const room = async (teams = false) => {
     setCreating(true);
     try {
-      if (!me) throw new Error('Sign in or play as a guest first');
+      await ensureSession(); // visitors play as a guest, exactly like the solo button
       const r = await api.post('/api/rooms', { gameId: g.id, difficulty: diff, teams });
       nav(`/room/${r.code}`);
     } catch (e: any) { toast(e.message, 'bad'); } finally { setCreating(false); }
@@ -140,8 +140,9 @@ export function GameDetail() {
 export function Daily() {
   useTitle('Daily Puzzle');
   const { me } = useStore();
-  const { data } = useAsync(() => api.get('/api/home'), [me?.id]);
+  const { data, error, reload } = useAsync(() => api.get('/api/home'), [me?.id]);
   const { data: board } = useAsync(() => (data ? api.get(`/api/leaderboard/${data.daily.gameId}?scope=daily`) : Promise.resolve(null)), [data?.daily?.gameId]);
+  if (error && !data) return <ErrorBox message={error} retry={reload} />;
   if (!data) return <div className="center" style={{ minHeight: '40vh' }}><div className="spinner" /></div>;
   return (
     <div className="stack">
@@ -162,11 +163,12 @@ export function Leaderboards() {
   useTitle('Leaderboards');
   const { me } = useStore();
   const params = new URLSearchParams(location.search);
-  const [game, setGame] = useState(params.get('game') ?? FAMILY[0].id);
+  const asked = params.get('game') ?? '';
+  const [game, setGame] = useState(FAMILY.some((g) => g.id === asked) ? asked : FAMILY[0].id); // an unknown id in the link falls back to the first game
   const [scope, setScope] = useState<'week' | 'all'>('week');
   const [friends, setFriends] = useState(false);
   const [view, setView] = useState<'games' | 'season'>(params.get('view') === 'season' ? 'season' : 'games');
-  const { data, loading } = useAsync(() => (view === 'games' ? api.get(`/api/leaderboard/${game}?scope=${scope}${friends ? '&friends=1' : ''}`) : Promise.resolve(null)), [game, scope, friends, view]);
+  const { data, loading, error, reload } = useAsync(() => (view === 'games' ? api.get(`/api/leaderboard/${game}?scope=${scope}${friends ? '&friends=1' : ''}`) : Promise.resolve(null)), [game, scope, friends, view]);
   if (view === 'season') return (
     <div className="stack">
       <div className="row wrap"><h1 style={{ fontSize: 'var(--fs-2xl)', flex: 1 }}>Leaderboards</h1><div className="seg"><button onClick={() => setView('games')}>By game</button><button className="on">Season</button></div></div>
@@ -182,7 +184,7 @@ export function Leaderboards() {
         {me && !me.isGuest && <label className="check"><input type="checkbox" checked={friends} onChange={(e) => setFriends(e.target.checked)} />Friends only</label>}
       </div>
       <div className="panel">
-        {loading ? <div className="spinner" /> : data?.entries?.length ? (
+        {loading ? <div className="spinner" /> : error ? <ErrorBox message={error} retry={reload} /> : data?.entries?.length ? (
           <div className="table-wrap"><table className="data"><thead><tr><th>#</th><th>Player</th><th>Level</th><th style={{ textAlign: 'right' }}>Best</th></tr></thead>
             <tbody>{data.entries.map((e: any) => <tr key={e.rank} style={e.me ? { background: 'rgba(255,61,139,.08)' } : undefined}><td className="mono">{e.rank}</td><td><span className="row" style={{ gap: 8 }}><Avatar id={e.avatar} size={24} name={e.name} />{e.userId ? <Link to={`/u/${e.userId}`}>{e.name}</Link> : e.name}{e.me ? ' (you)' : ''}</span></td><td>{e.level}</td><td className="mono" style={{ textAlign: 'right' }}>{e.score.toLocaleString()}</td></tr>)}</tbody></table></div>
         ) : <Empty icon="trophy" title="No scores yet">Play {BY_ID[game].title} to claim the top spot.</Empty>}

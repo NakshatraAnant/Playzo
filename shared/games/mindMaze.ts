@@ -96,7 +96,7 @@ export const mindMaze: Engine<MazeState, MazeAction> = {
     if (s.over) throw new GameError('Run is over');
     s.lastT = ctx.now;
     if ('end' in a) { s.over = true; return s; }
-    const d = DIRS[a.d];
+    const d = typeof a.d === 'string' && Object.hasOwn(DIRS, a.d) ? DIRS[a.d] : undefined;
     if (!d) throw new GameError('Bad direction');
     const { w, walls } = s.maze;
     if (walls[s.pos] & d.bit) return s; // bumping a wall is a no-op

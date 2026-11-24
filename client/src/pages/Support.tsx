@@ -64,7 +64,7 @@ export function SupportTicket() {
   if (!data) return <div className="spinner" />;
   const t = data.ticket;
   const reply = async (e: FormEvent) => { e.preventDefault(); try { await api.post(`/api/support/${id}/reply`, { message: msg }); setMsg(''); reload(); } catch (x: any) { toast(x.message, 'bad'); } };
-  const close = async () => { await api.post(`/api/support/${id}/close`); toast('Request closed', 'ok'); reload(); };
+  const close = async () => { try { await api.post(`/api/support/${id}/close`); toast('Request closed', 'ok'); reload(); } catch (x: any) { toast(x.message, 'bad'); } };
   return (
     <div className="stack" style={{ maxWidth: 760 }}>
       <Link to="/support" className="btn btn-ghost btn-sm" style={{ width: 'fit-content' }}><Icon name="back" size={14} />All requests</Link>

@@ -71,16 +71,28 @@ export function SectionHead({ eyebrow, title, to, action }: { eyebrow?: string; 
 
 export function Modal({ open, onClose, title, children, wide }: { open: boolean; onClose: () => void; title?: string; children: ReactNode; wide?: boolean }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Callers pass inline handlers: keep the latest in a ref so re-renders never steal focus from a field inside.
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { close.current(); return; }
+      if (e.key !== 'Tab' || !ref.current) return;
+      // Keep keyboard focus inside the dialog.
+      const items = [...ref.current.querySelectorAll<HTMLElement>('a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled])')].filter((x) => x.offsetParent !== null);
+      if (!items.length) { e.preventDefault(); return; }
+      const first = items[0], last = items[items.length - 1], cur = document.activeElement;
+      if (e.shiftKey && (cur === first || cur === ref.current)) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
+    };
     document.addEventListener('keydown', onKey);
     ref.current?.focus();
     const ov = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => { document.removeEventListener('keydown', onKey); document.body.style.overflow = ov; prev?.focus?.(); };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="overlay" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

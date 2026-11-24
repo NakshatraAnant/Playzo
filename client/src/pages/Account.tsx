@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from 'react';
+import { FormEvent, useEffect, useRef, useState } from 'react';
 import { SecuritySettings, SoundSettings, ProfileSettings, LinkedAccounts } from './Engage';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { api, trackEvent } from '../lib/api';
@@ -39,6 +39,8 @@ const OAUTH_ERRORS: Record<string, string> = {
   email_exists: 'An account with that email already exists. Sign in with your password, then link Google or Apple from Settings.',
   exchange_failed: 'The sign-in provider did not confirm the login. Please try again.',
   invalid_token: 'The sign-in could not be verified. Please try again.',
+  suspended: 'This account is suspended. Contact support if you think this is a mistake.',
+  linked_elsewhere: 'That Google or Apple account is already linked to another PLAYZO player.',
   provider_error: 'The sign-in provider reported an error. Please try again.',
 };
 
@@ -53,7 +55,7 @@ export function Login() {
   const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
     e.preventDefault(); setErr(null); setBusy(true);
-    try { const r = await api.post('/api/auth/login', f); setMe(r.user); nav(sp.get('next') ?? '/'); } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
+    try { const r = await api.post('/api/auth/login', f); setMe(r.user); const next = sp.get('next') ?? '/'; nav(/^\/(?![/\\])/.test(next) ? next : '/'); } catch (e: any) { setErr(e.message); } finally { setBusy(false); }
   };
   return (
     <AuthCard title="Welcome back" sub="Sign in to sync your progress, friends and rewards.">
@@ -70,7 +72,7 @@ export function Login() {
       <div className="divider" />
       <div className="col" style={{ gap: 8 }}>
         <Link to="/register" className="btn btn-block">Create an account</Link>
-        <button className="btn btn-ghost btn-block" onClick={async () => { await ensureSession(); trackEvent('onboarding_step', { step: 'guest' }); nav('/'); }}>Play as guest (no sign-up)</button>
+        <button className="btn btn-ghost btn-block" onClick={async () => { try { await ensureSession(); trackEvent('onboarding_step', { step: 'guest' }); nav('/'); } catch (x: any) { setErr(x.message); } }}>Play as guest (no sign-up)</button>
       </div>
       {providers.devMode && <p className="dim" style={{ fontSize: 12, marginTop: 12 }}>Local development build: emails go to the <Link to="/dev/outbox" style={{ color: 'var(--zo-cyan)' }}>dev outbox</Link>.</p>}
     </AuthCard>
@@ -208,6 +210,7 @@ export function Forgot() {
 }
 
 export function Reset() {
+  useTitle('Choose a new password');
   const [sp] = useSearchParams();
   const [pw, setPw] = useState('');
   const [msg, setMsg] = useState<string | null>(null);
@@ -230,7 +233,10 @@ export function TokenAction({ kind }: { kind: 'verify' | 'parent' }) {
   const [state, setState] = useState<'idle' | 'ok' | 'err'>('idle');
   const [msg, setMsg] = useState('');
   const { refresh } = useStore();
+  const sent = useRef(false); // links are single use: never submit twice
   useEffect(() => {
+    if (sent.current) return;
+    sent.current = true;
     api.post(kind === 'verify' ? '/api/auth/verify-email' : '/api/auth/parent-consent', { token: sp.get('token') })
       .then(() => { setState('ok'); refresh(); }).catch((e) => { setState('err'); setMsg(e.message); });
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -287,7 +293,7 @@ export function Settings() {
           {me.isGuest && <Link className="btn btn-primary" to="/register">Create account (keep progress)</Link>}
           {!me.emailVerified && !me.isGuest && <Chip tone="warn">Email not verified</Chip>}
           {me.ageBand === 'child' && <Chip tone={me.parentalConsent ? 'ok' : 'warn'}>{me.parentalConsent ? 'Parent approved' : 'Awaiting parent approval'}</Chip>}
-          <button className="btn" onClick={async () => { await api.post('/api/auth/logout'); setMe(null); nav('/'); refresh(); }}><Icon name="logout" />Sign out</button>
+          <button className="btn" onClick={async () => { try { await api.post('/api/auth/logout'); setMe(null); nav('/'); refresh(); } catch (e: any) { toast(e.message, 'bad'); } }}><Icon name="logout" />Sign out</button>
         </div>
       </div>
       <ProfileSettings />
@@ -303,7 +309,8 @@ export function Settings() {
         <label className="check" style={{ marginTop: 12 }}><input type="checkbox" checked={me.allowFriendRequests} onChange={(e) => patch({ allowFriendRequests: e.target.checked })} />Allow friend requests</label>
         <p className="dim" style={{ fontSize: 13, marginTop: 10 }}>PLAYZO uses first-party analytics only to improve games. We do not show behavioural ads, sell data, or fingerprint devices. Chat is emotes-only.</p>
       </div>
-      {!me.isGuest && (
+      {!me.isGuest && me.hasPassword === false && <div className="panel"><div className="panel-title"><Icon name="lock" /><h3>Password</h3></div><p className="muted" style={{ fontSize: 14 }}>You sign in with Google or Apple. To add a password too, <Link to="/forgot" style={{ color: 'var(--zo-cyan)' }}>request a reset link</Link>.</p></div>}
+      {!me.isGuest && me.hasPassword !== false && (
         <form className="panel" onSubmit={async (e) => { e.preventDefault(); try { await api.post('/api/auth/change-password', pw); toast('Password changed', 'ok'); setPw({ current: '', password: '' }); } catch (x: any) { toast(x.message, 'bad'); } }}>
           <div className="panel-title"><Icon name="lock" /><h3>Change password</h3></div>
           <div className="row wrap"><input className="input" type="password" placeholder="Current" value={pw.current} onChange={(e) => setPw({ ...pw, current: e.target.value })} style={{ flex: 1 }} autoComplete="current-password" aria-label="Current password" /><input className="input" type="password" placeholder="New (8+ characters)" value={pw.password} onChange={(e) => setPw({ ...pw, password: e.target.value })} style={{ flex: 1 }} autoComplete="new-password" aria-label="New password" /><button className="btn">Update</button></div>
@@ -333,9 +340,9 @@ export function Settings() {
       {providers.devMode && <Link to="/dev/outbox" className="dim" style={{ fontSize: 13 }}>Dev email outbox →</Link>}
       <Modal open={del} onClose={() => setDel(false)} title="Delete account permanently?">
         <form className="col" onSubmit={async (e) => { e.preventDefault(); try { await api.post('/api/auth/delete-account', delForm); setMe(null); toast('Your account was deleted'); nav('/'); } catch (x: any) { toast(x.message, 'bad'); } }}>
-          <p className="muted" style={{ fontSize: 14 }}>Type <b>DELETE</b> to confirm{me.isGuest ? '.' : ' and enter your password.'}</p>
+          <p className="muted" style={{ fontSize: 14 }}>Type <b>DELETE</b> to confirm{me.isGuest || me.hasPassword === false ? '.' : ' and enter your password.'}</p>
           <input className="input" value={delForm.confirm} onChange={(e) => setDelForm({ ...delForm, confirm: e.target.value })} aria-label="Type DELETE" />
-          {!me.isGuest && <input className="input" type="password" placeholder="Password" value={delForm.password} onChange={(e) => setDelForm({ ...delForm, password: e.target.value })} aria-label="Password" />}
+          {!me.isGuest && me.hasPassword !== false && <input className="input" type="password" placeholder="Password" value={delForm.password} onChange={(e) => setDelForm({ ...delForm, password: e.target.value })} aria-label="Password" />}
           <button className="btn btn-danger btn-block" disabled={delForm.confirm !== 'DELETE'}>Delete forever</button>
         </form>
       </Modal>

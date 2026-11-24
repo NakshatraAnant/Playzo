@@ -16,8 +16,8 @@ import { BY_ID } from '../shared/catalogue';
 import { Difficulty, DIFFICULTIES, GameError } from '../shared/engine';
 import { SeededRng } from '../shared/rng';
 import { db } from './db';
-import { currentUser, HttpError, requireUser, User, rateLimit } from './http';
-import { socialPolicy } from './access';
+import { currentUser, reloadUser, HttpError, requireUser, User, rateLimit } from './http';
+import { socialPolicy, canPlay } from './access';
 import { isBlocked } from './social';
 import { hooks } from './sessions';
 import { recordCompletion } from './progression';
@@ -27,6 +27,7 @@ import { config } from './config';
 
 export const EMOTES = ['👍', '🔥', '😮', '😂', '👏', '🤝', 'GG', 'Nice!'];
 const DISCONNECT_FORFEIT_MS = 60_000;
+const MAX_SOCKETS_PER_USER = 12;
 
 interface Member { userId: string; name: string; avatar: string; adult: boolean; ready: boolean; team: number; connected: boolean; leftAt: number | null; sockets: Set<WebSocket> }
 interface Room {
@@ -58,6 +59,8 @@ function snapshot(r: Room) {
 }
 /** Write the room to the database now (structural changes) - cheap with SQLite WAL. */
 function saveRoom(r: Room, status: string = r.status) {
+  // A room that was closed or expired stays closed: late socket events must not bring it back.
+  if (rooms.get(r.code) !== r && (status === 'lobby' || status === 'playing')) return;
   try {
     db().run(
       `INSERT INTO rooms (code, game_id, host_id, status, adult, snapshot, version, updated_at) VALUES (?, ?, ?, ?, ?, ?, 1, ?)
@@ -120,6 +123,8 @@ function broadcastState(r: Room) {
 export function createRoom(u: User, gameId: string, difficulty: string, teams: boolean, isPublic = false): Room {
   const format = formatFor(gameId);
   if (!format) throw new HttpError(400, 'This game has no multiplayer rooms', 'VALIDATION');
+  const play = canPlay(u, gameId); // maintenance and hidden games cannot host rooms either
+  if (!play.ok) throw new HttpError(play.status, play.message, play.code);
   const pol = socialPolicy(u);
   if (!pol.canJoinPrivateRooms) throw new HttpError(403, 'A parent or guardian must approve multiplayer first', 'FORBIDDEN');
   const e = ENGINES[gameId];
@@ -214,10 +219,12 @@ function applyAction(r: Room, uid: string, action: unknown) {
   if ((action as any).type === 'tick') return;
   const e = ENGINES[r.gameId];
   try {
-    r.state = e.apply(r.state, action, { rng: r.rng!, now: Date.now(), player: uid });
+    // Engines may change state before refusing an action: work on a copy so a bad action leaves no trace.
+    r.state = e.apply(structuredClone(r.state), action, { rng: r.rng!, now: Date.now(), player: uid });
   } catch (err) {
     if (err instanceof GameError) throw new HttpError(422, err.message, err.code);
-    throw err;
+    console.error('[engine] room action failed', r.gameId, err);
+    throw new HttpError(422, 'That move is not valid', 'BAD_ACTION');
   }
   r.lastActivity = Date.now();
   saveRoom(r);
@@ -260,7 +267,16 @@ setInterval(() => {
           finish(r, { winner: left.length === 1 ? left[0].userId : null, reason: 'opponent disconnected' });
         }
       }
-      if (r.status === 'playing' && r.format === 'race' && r.deadline && now > r.deadline) finish(r);
+      if (r.status === 'playing' && r.format === 'race') {
+        // Finish at the deadline, or once everyone still missing a score has been gone past the grace period.
+        const waiting = r.members.some((m) => !r.race[m.userId] && (m.connected || !m.leftAt || now - m.leftAt <= DISCONNECT_FORFEIT_MS));
+        if ((r.deadline && now > r.deadline) || !waiting) finish(r);
+      }
+      // After a match, a host who left hands the room (and the rematch button) to someone still here.
+      if (r.status === 'done' && !r.members.find((m) => m.userId === r.hostId)?.connected) {
+        const next = r.members.find((m) => m.connected);
+        if (next) { r.hostId = next.userId; r.dirty = true; broadcastRoom(r); }
+      }
       // Lobby: players who dropped and did not come back within the grace period leave the room.
       if (r.status === 'lobby') {
         const before = r.members.length;
@@ -320,6 +336,17 @@ export async function roomRoutes(app: FastifyInstance) {
     if (origin && !allowedOrigin(origin)) { send(socket, { t: 'error', message: 'Origin not allowed', code: 'FORBIDDEN' }); socket.close(); return; }
     const u = currentUser(req);
     if (!u) { send(socket, { t: 'error', message: 'Sign in to play online', code: 'AUTH_REQUIRED' }); socket.close(); return; }
+    if ((allSockets.get(u.id)?.size ?? 0) >= MAX_SOCKETS_PER_USER) { send(socket, { t: 'error', message: 'Too many open connections', code: 'RATE_LIMITED' }); socket.close(); return; }
+    // Heartbeat: drops connections that died silently, and ones whose session was signed out or suspended.
+    let alive = true;
+    socket.on('pong', () => { alive = true; });
+    socket.on('error', () => undefined); // a 'close' always follows
+    const heartbeat = setInterval(() => {
+      if (!alive) { socket.terminate(); return; }
+      if (!reloadUser(req)) { socket.close(); return; }
+      alive = false;
+      if (socket.readyState === 1) socket.ping();
+    }, 30_000);
     let room: Room | null = null;
     let msgs = 0;
     const rl = setInterval(() => { msgs = 0; }, 1000);
@@ -329,13 +356,14 @@ export async function roomRoutes(app: FastifyInstance) {
       let m: any;
       try { m = JSON.parse(raw.toString()); } catch { return fail(new HttpError(400, 'Bad message', 'VALIDATION')); }
       try {
-        const fresh = db().get<User>("SELECT * FROM users WHERE id = ? AND status = 'active'", u.id);
-        if (!fresh) { socket.close(); return; }
+        const fresh = reloadUser(req);
+        if (!fresh || fresh.id !== u.id) { socket.close(); return; }
         switch (m.t) {
           case 'join': {
             const r = rooms.get(String(m.code ?? '').toUpperCase());
             if (!r) throw new HttpError(404, 'Room not found', 'NOT_FOUND');
             join(r, fresh, socket);
+            if (room && room !== r) leave(true); // one room per connection
             room = r;
             broadcastRoom(r);
             broadcastState(r);
@@ -370,6 +398,8 @@ export async function roomRoutes(app: FastifyInstance) {
             if (!pol.canUsePublicMatchmaking) throw new HttpError(403, 'Quick match needs a registered 13+ account. Play with friends using a room code instead.', 'FORBIDDEN');
             const gameId = String(m.gameId);
             if (formatFor(gameId) !== 'versus' || ENGINES[gameId].players.max < 2) throw new HttpError(400, 'Quick match is not available for this game', 'VALIDATION');
+            const play = canPlay(fresh, gameId);
+            if (!play.ok) throw new HttpError(play.status, play.message, play.code);
             const key = `${gameId}:${isAdult(fresh) ? 'adult' : 'teen'}`;
             const list = (queue.get(key) ?? []).filter((q) => q.userId !== u.id && !isBlocked(q.userId, u.id));
             const opp = list.shift();
@@ -403,7 +433,14 @@ export async function roomRoutes(app: FastifyInstance) {
       broadcastRoom(room);
       room = null;
     };
-    socket.on('close', () => { clearInterval(rl); leave(false); for (const [k, list] of queue) queue.set(k, list.filter((q) => q.userId !== u.id)); allSockets.get(u.id)?.delete(socket); });
+    socket.on('close', () => {
+      clearInterval(rl); clearInterval(heartbeat);
+      leave(false);
+      const mine = allSockets.get(u.id);
+      mine?.delete(socket);
+      // Another tab may still be searching: leave the queue only when the last connection closes.
+      if (!mine?.size) { allSockets.delete(u.id); for (const [k, list] of queue) queue.set(k, list.filter((q) => q.userId !== u.id)); }
+    });
     if (!allSockets.has(u.id)) allSockets.set(u.id, new Set());
     allSockets.get(u.id)!.add(socket);
     send(socket, { t: 'hello', userId: u.id, emotes: EMOTES, serverNow: Date.now() });

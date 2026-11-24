@@ -18,7 +18,7 @@ async function request<T>(method: string, url: string, body?: unknown, retries =
   } catch {
     if (retries > 0 && method === 'GET') { await new Promise((r) => setTimeout(r, 600)); return request(method, url, body, retries - 1); }
     throw new ApiError(0, navigator.onLine
-      ? "Can't reach the PLAYZO server. If you run PLAYZO on this computer, start it with start-playzo.cmd, then try again."
+      ? (['localhost', '127.0.0.1'].includes(location.hostname) ? "Can't reach the PLAYZO server. If you run PLAYZO on this computer, start it with start-playzo.cmd, then try again." : "Can't reach PLAYZO right now. Please try again in a moment.")
       : 'You appear to be offline. Check your connection and try again.', 'NETWORK');
   }
   const text = await res.text();

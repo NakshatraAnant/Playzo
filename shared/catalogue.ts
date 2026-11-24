@@ -685,7 +685,8 @@ export const CATALOGUE: GameMeta[] = [
   },
 ];
 
-export const BY_ID: Record<string, GameMeta> = Object.fromEntries(CATALOGUE.map((g) => [g.id, g]));
+/** No prototype: ids such as "constructor" from a URL or request body are simply unknown. */
+export const BY_ID: Record<string, GameMeta> = Object.assign(Object.create(null), Object.fromEntries(CATALOGUE.map((g) => [g.id, g])));
 export const FAMILY = CATALOGUE.filter((g) => g.env === 'family');
 export const LOUNGE = CATALOGUE.filter((g) => g.env === 'lounge');
 export const AGE_MIN: Record<GameMeta['age'], number> = { '6+': 6, '8+': 8, '10+': 10, '12+': 12, '21+': 21 };

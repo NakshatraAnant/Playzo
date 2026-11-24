@@ -58,8 +58,9 @@ function owned(u: User, id: string): SessionRow {
 
 export function loungeMinutesToday(userId: string): number {
   return db().get<{ m: number }>(
-    "SELECT COALESCE(SUM((julianday(COALESCE(ended_at, ?)) - julianday(started_at)) * 1440), 0) AS m FROM game_sessions WHERE user_id = ? AND env = 'lounge' AND started_at >= ?",
-    nowIso(), userId, dayKey() + 'T00:00:00.000Z',
+    // Sessions that began before midnight count from midnight, so they cannot slip past the daily limit.
+    "SELECT COALESCE(SUM((julianday(COALESCE(ended_at, ?)) - julianday(MAX(started_at, ?))) * 1440), 0) AS m FROM game_sessions WHERE user_id = ? AND env = 'lounge' AND COALESCE(ended_at, ?) >= ?",
+    nowIso(), dayKey() + 'T00:00:00.000Z', userId, nowIso(), dayKey() + 'T00:00:00.000Z',
   )!.m;
 }
 function loungeLimitCheck(u: User) {
@@ -69,6 +70,7 @@ function loungeLimitCheck(u: User) {
 
 /* ---------------- start ---------------- */
 export function startSession(u: User, body: { gameId: string; difficulty?: string; context?: Context; ref?: string; config?: Record<string, unknown> }) {
+  if (typeof body.gameId !== 'string') throw new HttpError(404, 'Game not found', 'NOT_FOUND');
   const meta = BY_ID[body.gameId];
   const access = canPlay(u, body.gameId);
   if (!access.ok) throw new HttpError(access.status, access.message, access.code);
@@ -99,7 +101,7 @@ export function startSession(u: User, body: { gameId: string; difficulty?: strin
   const startedMs = Date.now();
   const row: SessionRow = {
     id, user_id: u.id, game_id: body.gameId, env: meta.env, mode: engine.mode, status: 'active', difficulty, seed, seed_commit: commitOf(seed),
-    rng_cursor: 0, rules_version: engine.rulesVersion, state: null, context, context_ref: body.ref ?? null, score: null, result: null, started_ms: startedMs, started_at: nowIso(), ended_at: null,
+    rng_cursor: 0, rules_version: engine.rulesVersion, state: null, context, context_ref: typeof body.ref === 'string' ? body.ref.slice(0, 64) : null, score: null, result: null, started_ms: startedMs, started_at: nowIso(), ended_at: null,
   };
   let view: unknown = null;
   if (engine.mode === 'server') {
@@ -161,7 +163,9 @@ export async function act(u: User, id: string, action: unknown) {
       state = engine.apply(state, action, ctx);
     } catch (e) {
       if (e instanceof GameError) throw new HttpError(422, e.message, e.code);
-      throw e;
+      // Malformed input an engine did not anticipate: nothing was saved, so refuse the action.
+      console.error('[engine] action failed', row.game_id, e);
+      throw new HttpError(422, 'That move is not valid', 'BAD_ACTION');
     }
     return persist(u, row, engine, state, rng, action);
   });
@@ -230,7 +234,7 @@ export async function submit(u: User, id: string, body: { actions?: unknown; con
     const engine = ENGINES[row.game_id];
     const actions = body.actions;
     if (!Array.isArray(actions) || actions.length > MAX_ACTIONS) throw new HttpError(400, 'Bad action log', 'VALIDATION');
-    const lastT = actions.length ? Number((actions[actions.length - 1] as any).t) : 0;
+    const lastT = actions.length ? Number((actions[actions.length - 1] as any)?.t) : 0;
     const reject = (reason: string, code: string) => {
       db().run("UPDATE game_sessions SET status = 'rejected', reject_reason = ?, ended_at = ? WHERE id = ?", reason, nowIso(), row.id);
       track('game_rejected', u.id, { game: row.game_id, code });
@@ -245,7 +249,8 @@ export async function submit(u: User, id: string, body: { actions?: unknown; con
       state = verifyReplay(engine, row.seed, row.difficulty, actions, sanitizeConfig(body.config)).state;
     } catch (e) {
       if (e instanceof GameError) reject(e.message, e.code);
-      throw e;
+      console.error('[engine] replay failed', row.game_id, e);
+      reject('malformed action', 'MALFORMED');
     }
     let completion: CompletionOutput | null = null;
     db().tx(() => {
@@ -316,7 +321,7 @@ export async function endSession(u: User, id: string) {
 /** Close Lounge sessions idle for 2h and abandon stale family sessions. */
 export function reapSessions() {
   const cutoff = Date.now() - 2 * 3600_000;
-  for (const row of db().all<SessionRow>("SELECT * FROM game_sessions WHERE status = 'active' AND started_ms < ? LIMIT 200", cutoff)) {
+  for (const row of db().all<SessionRow>("SELECT * FROM game_sessions WHERE status = 'active' AND started_ms < ? AND COALESCE((SELECT MAX(at_ms) FROM game_actions a WHERE a.session_id = game_sessions.id), 0) < ? LIMIT 200", cutoff, cutoff)) {
     const u = db().get<User>('SELECT * FROM users WHERE id = ?', row.user_id);
     if (!u) continue;
     endSession(u, row.id).catch((e) => console.error('[reaper]', e));

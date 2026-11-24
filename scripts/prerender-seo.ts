@@ -28,14 +28,14 @@ function page(url: string, title: string, desc: string, image: string, jsonld?: 
 
 for (const g of FAMILY) {
   fs.writeFileSync(path.join(dist, 'og', `${g.id}.svg`), og(g.title, g.tagline.slice(0, 60), g.theme.bg[0], g.theme.bg[1], g.theme.accent));
-  page(`/games/${g.id}`, `${g.title}: play free on PLAYZO`, `${g.tagline} ${g.description}`.slice(0, 300), `/og/${g.id}.svg`, {
+  page(`/games/${g.id}`, `${g.title}: play free on PLAYZO`, `${g.tagline} ${g.description}`.slice(0, 300), '/icons/og.png', {
     '@context': 'https://schema.org', '@type': 'VideoGame', name: g.title, description: g.description, genre: g.category, url: `${base}/games/${g.id}`,
     gamePlatform: 'Web browser', applicationCategory: 'Game', operatingSystem: 'Any', contentRating: g.age, publisher: { '@type': 'Organization', name: 'PLAYZO' },
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'INR' }, playMode: g.formats.some((f) => ['versus', 'teams', 'group', 'race'].includes(f)) ? 'MultiPlayer' : 'SinglePlayer',
   });
 }
-page('/games', 'Discover 25 original games · PLAYZO', 'Browse PLAYZO puzzles, word games, strategy duels and party games. Free to play, no real-money anything.', '/og/playzo.svg');
-page('/daily', 'Daily Puzzle · PLAYZO', 'One shared puzzle for everyone, every day. Compare your score on the daily board.', '/og/playzo.svg');
+page('/games', 'Discover 25 original games · PLAYZO', 'Browse PLAYZO puzzles, word games, strategy duels and party games. Free to play, no real-money anything.', '/icons/og.png');
+page('/daily', 'Daily Puzzle · PLAYZO', 'One shared puzzle for everyone, every day. Compare your score on the daily board.', '/icons/og.png');
 fs.writeFileSync(path.join(dist, 'sitemap.xml'), sitemapXml(base));
 fs.writeFileSync(path.join(dist, 'robots.txt'), robotsTxt(base));
 console.log(`[seo] prerendered ${FAMILY.length + 2} pages, ${FAMILY.length + 1} OG images, sitemap.xml, robots.txt`);

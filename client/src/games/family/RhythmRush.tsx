@@ -11,6 +11,8 @@ export default function RhythmRush() {
   const ctl = useCtl();
   const s = ctl.view as RhythmState;
   const canvas = useRef<HTMLCanvasElement>(null);
+  const ctlRef = useRef(ctl);
+  ctlRef.current = ctl;
   const [flash, setFlash] = useState<{ lane: number; j: string; at: number } | null>(null);
   const [offset, setOffset] = useState(() => { try { return Number(localStorage.getItem('pz-rhythm-offset') ?? 0); } catch { return 0; } });
 
@@ -18,22 +20,27 @@ export default function RhythmRush() {
   useEffect(() => {
     const a = audio(); if (!a) return;
     const beat = 60000 / s.bpm;
-    const start = a.currentTime - ctl.elapsed() / 1000;
-    const timers: number[] = [];
-    for (let b = 0; LEAD_IN + b * beat < RHYTHM_DURATION; b++) {
-      const at = start + (LEAD_IN + b * beat) / 1000;
-      if (at < a.currentTime) continue;
-      const when = at - a.currentTime;
-      sfx.kick(when);
-      if (b % 2) sfx.hat(when);
-      sfx.hat(when + beat / 2000);
-      if (b % 4 === 0) sfx.note(SCALE[(b / 4) % SCALE.length] / 2, when, beat / 1000 * 1.8);
-    }
-    for (const n of s.notes) {
-      const at = start + n.t / 1000;
-      if (at > a.currentTime) sfx.note(SCALE[(n.lane + (n.id % 3)) % SCALE.length], at - a.currentTime, 0.12);
-    }
-    return () => { timers.forEach(clearTimeout); };
+    // Short look-ahead: the track follows the game clock, so it stops on pause, stays in sync after
+    // resume, and ends when the player leaves.
+    const AHEAD = 260;
+    let upTo = ctlRef.current.elapsed();
+    const schedule = () => {
+      const c = ctlRef.current;
+      if (c.isPaused() || c.over) return;
+      const now = c.elapsed(), to = now + AHEAD;
+      for (let b = Math.max(0, Math.ceil((upTo - LEAD_IN) / beat)); LEAD_IN + b * beat < Math.min(to, RHYTHM_DURATION); b++) {
+        const when = Math.max(0, (LEAD_IN + b * beat - now) / 1000);
+        sfx.kick(when);
+        if (b % 2) sfx.hat(when);
+        sfx.hat(when + beat / 2000);
+        if (b % 4 === 0) sfx.note(SCALE[(b / 4) % SCALE.length] / 2, when, beat / 1000 * 1.8);
+      }
+      for (const n of s.notes) if (n.t >= upTo && n.t < to) sfx.note(SCALE[(n.lane + (n.id % 3)) % SCALE.length], Math.max(0, (n.t - now) / 1000), 0.12);
+      upTo = to;
+    };
+    schedule();
+    const id = setInterval(schedule, 60);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

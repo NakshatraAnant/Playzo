@@ -1,7 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { db, weekKey } from './db';
-import { HttpError, currentUser, requireUser, User } from './http';
-import { CATALOGUE, BY_ID, FAMILY, GameMeta } from '../shared/catalogue';
+import { HttpError, currentUser, requireUser, rateLimit, User } from './http';
+import { CATALOGUE, BY_ID, FAMILY as ALL_FAMILY, GameMeta } from '../shared/catalogue';
 import { canSee, legalGate, gameStatus, loungeAccess } from './access';
 import { ENGINES } from './games/registry';
 import { leaderboard, missionsFor, claimMission, dailyPuzzle, streak, ACHIEVEMENTS, levelFor, xpForLevel } from './progression';
@@ -50,6 +50,8 @@ function card(g: GameMeta, u: User | null) {
   };
 }
 
+const visible = (g: GameMeta) => gameStatus(g.id) !== 'hidden';
+
 const COLLECTIONS = [
   { id: 'quick', title: 'One-minute thrills', blurb: 'Fast sessions for a quick break', ids: ['number-rush', 'pattern-hunter', 'color-dash', 'reflex-arena', 'geo-sprint', 'rhythm-rush'] },
   { id: 'friends', title: 'Better with friends', blurb: 'Live rooms, races and team trivia', ids: ['word-duel', 'trivia-clash', 'party-chaos', 'chess-blitz', 'territory-wars', 'memory-duel'] },
@@ -69,7 +71,7 @@ export async function contentRoutes(app: FastifyInstance) {
     const u = currentUser(req);
     const g = BY_ID[(req.params as any).id];
     if (!g || !canSee(u, g) || gameStatus(g.id) === 'hidden') throw new HttpError(404, 'Game not found', 'NOT_FOUND');
-    const related = CATALOGUE.filter((x) => x.env === g.env && x.id !== g.id && x.category === g.category && canSee(u, x)).slice(0, 4).map((x) => card(x, u));
+    const related = CATALOGUE.filter((x) => x.env === g.env && x.id !== g.id && x.category === g.category && canSee(u, x) && visible(x)).slice(0, 4).map((x) => card(x, u));
     track('game_view', u?.id ?? null, { game: g.id });
     return {
       game: card(g, u), related,
@@ -99,6 +101,8 @@ export async function contentRoutes(app: FastifyInstance) {
 
   app.get('/api/home', async (req) => {
     const u = currentUser(req);
+    // Hidden games appear nowhere on the home page.
+    const FAMILY = ALL_FAMILY.filter(visible);
     const week = weekKey();
     const rng = new SeededRng(`featured:${week}`);
     const featured = rng.shuffle(FAMILY.slice()).slice(0, 5).map((g) => card(g, u));
@@ -108,9 +112,9 @@ export async function contentRoutes(app: FastifyInstance) {
     let continuePlaying: unknown[] = [], recommended: unknown[] = [], recent: unknown[] = [], friendsActivity: unknown[] = [];
     if (u) {
       continuePlaying = db().all<{ id: string; game_id: string; started_at: string }>("SELECT id, game_id, started_at FROM game_sessions WHERE user_id = ? AND status = 'active' AND env = 'family' AND mode = 'server' ORDER BY started_at DESC LIMIT 4", u.id)
-        .map((s) => ({ sessionId: s.id, game: card(BY_ID[s.game_id], u), startedAt: s.started_at }));
+        .filter((s) => BY_ID[s.game_id] && visible(BY_ID[s.game_id])).map((s) => ({ sessionId: s.id, game: card(BY_ID[s.game_id], u), startedAt: s.started_at }));
       const played = db().all<{ game_id: string; plays: number }>('SELECT game_id, plays FROM game_stats WHERE user_id = ? ORDER BY last_played_at DESC', u.id);
-      recent = played.slice(0, 8).map((p) => card(BY_ID[p.game_id], u)).filter((g) => g.env === 'family');
+      recent = played.filter((p) => BY_ID[p.game_id]?.env === 'family' && visible(BY_ID[p.game_id])).slice(0, 8).map((p) => card(BY_ID[p.game_id], u));
       // Recommend unplayed games from the user's favourite categories, then other unplayed games.
       const catCount: Record<string, number> = {};
       for (const p of played) { const c = BY_ID[p.game_id]?.category; if (c) catCount[c] = (catCount[c] ?? 0) + p.plays; }
@@ -143,12 +147,12 @@ export async function contentRoutes(app: FastifyInstance) {
       trending: trendingList.slice(0, 8).map((g) => card(g, u)),
       quick: FAMILY.filter((g) => sessionMinutes(g) <= 3).map((g) => card(g, u)),
       multiplayer: FAMILY.filter((g) => g.formats.some((f) => ['versus', 'teams', 'group', 'race'].includes(f))).map((g) => card(g, u)),
-      categories: PREF_CATEGORIES.filter((c) => c.key !== 'multiplayer').map((c) => ({ key: c.key, label: c.label, icon: c.icon, games: (c.games as readonly string[]).map((id) => card(BY_ID[id], u)) })),
+      categories: PREF_CATEGORIES.filter((c) => c.key !== 'multiplayer').map((c) => ({ key: c.key, label: c.label, icon: c.icon, games: (c.games as readonly string[]).filter((id) => visible(BY_ID[id])).map((id) => card(BY_ID[id], u)) })),
       community,
       featured, spotlight: { game: spotlight, week, leaderboard: leaderboard(spotlight.id, 'week', u?.id ?? null, false, 5) },
       daily: { ...dp, game: card(BY_ID[dp.gameId], u), done: dailyDone, leaderboard: leaderboard(dp.gameId, 'daily', u?.id ?? null, false, 5) },
       continuePlaying, recommended, recent, friendsActivity,
-      collections: COLLECTIONS.map((c) => ({ ...c, games: c.ids.map((id) => card(BY_ID[id], u)) })),
+      collections: COLLECTIONS.map((c) => ({ ...c, games: c.ids.filter((id) => visible(BY_ID[id])).map((id) => card(BY_ID[id], u)) })),
       launchLineup: FAMILY.map((g) => g.id),
       missions: u ? missionsFor(u.id) : null,
       streak: u ? streak(u.id) : 0,
@@ -192,6 +196,7 @@ export async function contentRoutes(app: FastifyInstance) {
 
   app.post('/api/events', async (req) => {
     const u = currentUser(req);
+    rateLimit(req, 'events', 120, 'ip');
     const b = (req.body ?? {}) as Record<string, unknown>;
     if (!CLIENT_EVENTS.has(String(b.name))) throw new HttpError(400, 'Unknown event', 'VALIDATION');
     track(String(b.name), u?.id ?? null, typeof b.props === 'object' && b.props ? (b.props as Record<string, unknown>) : undefined);
@@ -200,6 +205,7 @@ export async function contentRoutes(app: FastifyInstance) {
 
   app.post('/api/client-errors', async (req) => {
     const u = currentUser(req);
+    rateLimit(req, 'client-errors', 20, 'ip');
     const b = (req.body ?? {}) as Record<string, unknown>;
     db().run('INSERT INTO client_errors (user_id, message, where_) VALUES (?, ?, ?)', u?.id ?? null, String(b.message ?? '').slice(0, 500), String(b.where ?? '').slice(0, 200));
     return { ok: true };

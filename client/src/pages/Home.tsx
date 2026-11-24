@@ -50,8 +50,8 @@ export default function Home() {
         </div>
         {cm && (cm.players > 0 || cm.gamesThisWeek > 0) && (
           <div className="row wrap community" aria-label="Community this week">
-            {cm.players > 0 && <span><b>{cm.players.toLocaleString()}</b> players</span>}
-            {cm.gamesThisWeek > 0 && <span><b>{cm.gamesThisWeek.toLocaleString()}</b> games played this week</span>}
+            {cm.players > 0 && <span><b>{cm.players.toLocaleString()}</b> {cm.players === 1 ? 'player' : 'players'}</span>}
+            {cm.gamesThisWeek > 0 && <span><b>{cm.gamesThisWeek.toLocaleString()}</b> {cm.gamesThisWeek === 1 ? 'game' : 'games'} played this week</span>}
             {cm.matchesThisWeek > 0 && <span><b>{cm.matchesThisWeek.toLocaleString()}</b> live matches this week</span>}
           </div>
         )}

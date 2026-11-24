@@ -9,8 +9,8 @@
 ```bash
 npm install
 npm run local   # optimised build on http://localhost:5757 (or: npm run dev for live reload)
-npm test        # 188 unit, engine, API, WebSocket and performance tests
-npm run test:e2e  # 114 browser tests (Edge)
+npm test        # 230 unit, engine, API, WebSocket and performance tests
+npm run test:e2e  # 137 browser tests (Edge)
 ```
 
 ## Highlights
@@ -33,4 +33,4 @@ All docs live in `docs/`:
 - DESIGN_SYSTEM · SECURITY_PLAN · LEGAL_AND_COMPLIANCE_GATES
 - QA_TEST_REPORT · DEPLOYMENT_GUIDE · KNOWN_ISSUES · ASSET_REGISTER · LOUNGE_MATH
 
-**Status:** locally functional. Not production-engineered, security-audited, legally reviewed or ready for public release. See KNOWN_ISSUES.md.
+**Status:** locally functional. Hardened for a single-server deployment (see docs/AUDIT_2026-11.md); not independently security-audited, legally reviewed or ready for public release. See KNOWN_ISSUES.md.

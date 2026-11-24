@@ -18,13 +18,13 @@ export function Play() {
   useTitle(meta ? `Playing ${meta.title}` : 'Play');
   if (!meta || meta.env !== 'family') return <ErrorBox message="Game not found" />;
   const diff = (['easy', 'normal', 'hard'].includes(sp.get('difficulty') ?? '') ? sp.get('difficulty') : 'normal') as Difficulty;
-  const context = (sp.get('context') ?? 'solo') as any;
+  const context = (['daily', 'challenge', 'race'].includes(sp.get('context') ?? '') ? sp.get('context') : 'solo') as any;
   return <GameHost key={`${id}-${diff}-${context}-${sp.get('ref')}`} gameId={id} difficulty={diff} context={context} refId={sp.get('ref') ?? undefined} resume={sp.get('resume') ?? undefined} />;
 }
 
 export function Challenge() {
   const { id = '' } = useParams();
-  const { me, ensureSession } = useStore();
+  const { me, ensureSession, toast } = useStore();
   const nav = useNavigate();
   const { data, error } = useAsync(() => api.get(`/api/challenges/${id}`), [id, me?.id]);
   useTitle('Friend challenge');
@@ -36,7 +36,7 @@ export function Challenge() {
   const share = async () => {
     const url = location.href;
     if (navigator.share) await navigator.share({ title: 'PLAYZO challenge', text: `Beat my ${meta.title} run on PLAYZO!`, url }).catch(() => undefined);
-    else await navigator.clipboard?.writeText(url);
+    else { await navigator.clipboard?.writeText(url).catch(() => undefined); toast('Challenge link copied', 'ok'); }
   };
   return (
     <div className="stack" style={{ maxWidth: 640, margin: '0 auto' }}>
@@ -50,9 +50,10 @@ export function Challenge() {
         </div>
         {c.status === 'completed' && <p style={{ textAlign: 'center', marginTop: 12 }}><Chip tone="on" icon="trophy">{c.fromScore === c.toScore ? 'A perfect tie!' : `${c.fromScore > c.toScore ? c.fromName : c.mine ? 'Your rival' : 'You'} won`}</Chip></p>}
         <div className="row wrap" style={{ marginTop: 16, justifyContent: 'center' }}>
-          {!mineDone && c.status === 'open' && <button className="btn btn-primary btn-lg" onClick={async () => { await ensureSession(); nav(`/play/${c.gameId}?context=challenge&ref=${c.id}`); }}><Icon name="play" />{c.mine ? 'Set your score' : 'Accept challenge'}</button>}
+          {!mineDone && c.status === 'open' && <button className="btn btn-primary btn-lg" onClick={async () => { try { await ensureSession(); } catch (e: any) { toast(e.message, 'bad'); return; } nav(`/play/${c.gameId}?context=challenge&ref=${c.id}`); }}><Icon name="play" />{c.mine ? 'Set your score' : 'Accept challenge'}</button>}
           {c.mine && <button className="btn btn-lg" onClick={share}><Icon name="share" />Share link</button>}
         </div>
+        {c.status === 'expired' && <p style={{ textAlign: 'center', marginTop: 12 }}><Chip tone="warn" icon="clock">This challenge has expired</Chip></p>}
         <p className="dim" style={{ fontSize: 12, textAlign: 'center', marginTop: 8 }}>Expires {new Date(c.expiresAt).toLocaleDateString()}. Both runs are verified by the server.</p>
       </div>
     </div>
@@ -67,19 +68,30 @@ export function Rooms() {
   const [code, setCode] = useState('');
   const [queueing, setQueueing] = useState<string | null>(null);
   const ws = useRef<WebSocket | null>(null);
-  useEffect(() => () => ws.current?.close(), []);
-  const join = async () => { await ensureSession(); if (code.trim().length === 6) nav(`/room/${code.trim().toUpperCase()}`); };
+  useEffect(() => () => { const s = ws.current; ws.current = null; s?.close(); }, []);
+  const join = async () => { try { await ensureSession(); } catch (e: any) { toast(e.message, 'bad'); return; } if (code.trim().length === 6) nav(`/room/${code.trim().toUpperCase()}`); };
   const quick = async (gameId: string) => {
-    await ensureSession();
+    try { await ensureSession(); } catch (e: any) { toast(e.message, 'bad'); return; }
     ws.current?.close();
     const s = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
     ws.current = s;
-    s.onopen = () => s.send(JSON.stringify({ t: 'queue', gameId }));
+    let finished = false;
+    const enqueue = () => { if (s.readyState === 1) s.send(JSON.stringify({ t: 'queue', gameId })); };
+    s.onopen = enqueue;
+    // The server drops searches after two minutes: renew while this page is still looking.
+    const renew = setInterval(enqueue, 60_000);
+    s.onclose = () => {
+      clearInterval(renew);
+      if (ws.current !== s) return;
+      ws.current = null;
+      setQueueing(null);
+      if (!finished) toast('Quick match lost its connection. Please try again.', 'bad');
+    };
     s.onmessage = (e) => {
       const m = JSON.parse(e.data);
       if (m.t === 'queued') setQueueing(gameId);
-      if (m.t === 'matched') { sfx.fanfare(); s.close(); nav(`/room/${m.code}`); }
-      if (m.t === 'error') { toast(m.message, 'bad'); setQueueing(null); s.close(); }
+      if (m.t === 'matched') { finished = true; sfx.fanfare(); s.close(); nav(`/room/${m.code}`); }
+      if (m.t === 'error') { finished = true; toast(m.message, 'bad'); setQueueing(null); s.close(); }
     };
   };
   const versus = ['chess-blitz', 'connect-five', 'hex-conquest', 'territory-wars', 'word-duel', 'memory-duel', 'trivia-clash'];
@@ -97,7 +109,7 @@ export function Rooms() {
       <div className="panel">
         <div className="panel-title"><Icon name="bolt" /><h3>Quick match</h3>{queueing && <Chip tone="on">Searching for {BY_ID[queueing].title}…</Chip>}</div>
         {me && !me.social.canUsePublicMatchmaking ? <p className="muted" style={{ fontSize: 14 }}>Quick match with strangers is available to registered accounts aged 13+. You can still play with friends using room codes.</p> : (
-          <div className="row wrap">{versus.map((g) => <button key={g} className="btn" onClick={() => quick(g)} disabled={!!queueing}>{BY_ID[g].title}</button>)}{queueing && <button className="btn btn-ghost" onClick={() => { ws.current?.send(JSON.stringify({ t: 'unqueue' })); ws.current?.close(); setQueueing(null); }}>Cancel</button>}</div>
+          <div className="row wrap">{versus.map((g) => <button key={g} className="btn" onClick={() => quick(g)} disabled={!!queueing}>{BY_ID[g].title}</button>)}{queueing && <button className="btn btn-ghost" onClick={() => { const s = ws.current; ws.current = null; if (s?.readyState === 1) s.send(JSON.stringify({ t: 'unqueue' })); s?.close(); setQueueing(null); }}>Cancel</button>}</div>
         )}
       </div>
       <div className="panel">
@@ -116,7 +128,8 @@ function ChallengeList() {
 }
 
 export function Room() {
-  const { code = '' } = useParams();
+  const { code: rawCode = '' } = useParams();
+  const code = rawCode.toUpperCase(); // shared links may be lower case
   const { me, ensureSession, toast } = useStore();
   const nav = useNavigate();
   const [room, setRoom] = useState<any>(null);
@@ -131,7 +144,7 @@ export function Room() {
     let alive = true, retry = 0;
     let mine: WebSocket | null = null; // the socket owned by THIS effect run (never another run's)
     const connect = async () => {
-      await ensureSession();
+      try { await ensureSession(); } catch { if (alive && retry < 15) { retry++; setTimeout(connect, Math.min(5000, 600 * retry)); } else if (alive) setErr("Can't reach PLAYZO right now."); return; }
       if (!alive) return; // unmounted while waiting: never open an orphan connection
       const s = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/ws`);
       mine = s;
@@ -145,7 +158,7 @@ export function Room() {
         if (m.t === 'emote') { const id = Date.now() + Math.random(); setFloating((f) => [...f, { id, e: m.e, from: m.from }]); setTimeout(() => setFloating((f) => f.filter((x) => x.id !== id)), 2200); }
         if (m.t === 'error') { if (['NOT_FOUND', 'STARTED', 'FULL', 'FORBIDDEN', 'CLOSED'].includes(m.code)) { alive = false; setErr(m.message); } else toast(m.message, 'bad'); }
       };
-      s.onclose = () => { setConn('closed'); if (alive && retry < 15) { retry++; setTimeout(connect, Math.min(5000, 600 * retry)); } };
+      s.onclose = () => { setConn('closed'); if (alive && retry < 15) { retry++; setTimeout(connect, Math.min(5000, 600 * retry)); } else if (alive) setErr('The connection to this room was lost.'); };
     };
     connect();
     return () => {
@@ -181,7 +194,7 @@ export function Room() {
   const shareCode = async () => {
     const url = `${location.origin}/room/${code}`;
     if (navigator.share) await navigator.share({ title: `Join my ${meta.title} room on PLAYZO`, text: `Room code ${code}. Aaja PLAYZO pe khelte hain!`, url }).catch(() => undefined);
-    else { await navigator.clipboard?.writeText(url); toast('Invite link copied', 'ok'); }
+    else { await navigator.clipboard?.writeText(url).catch(() => undefined); toast('Invite link copied', 'ok'); }
   };
   return (
     <div className="stage">
@@ -226,7 +239,7 @@ export function Room() {
           <div className="panel" style={{ width: '100%', maxWidth: 560 }}>
             <div className="panel-title"><Icon name="trophy" /><h3>Race standings</h3></div>
             {room.members.map((m: any) => ({ m, s: room.race.scores[m.userId] })).sort((a: any, b: any) => (b.s?.score ?? -1) - (a.s?.score ?? -1)).map(({ m, s }: any, i: number) => (
-              <div key={m.userId} className="row" style={{ gap: 10, padding: '4px 0' }}><b className="mono" style={{ width: 20 }}>{i + 1}</b><Avatar id={m.avatar} size={26} name={m.name} /><span style={{ flex: 1 }}>{m.name}{m.me ? ' (you)' : ''}</span>{s ? <b className="mono">{s.score.toLocaleString()}</b> : <span className="dim pulse">playing…</span>}</div>
+              <div key={m.userId} className="row" style={{ gap: 10, padding: '4px 0' }}><b className="mono" style={{ width: 20 }}>{i + 1}</b><Avatar id={m.avatar} size={26} name={m.name} /><span style={{ flex: 1 }}>{m.name}{m.me ? ' (you)' : ''}</span>{s ? <b className="mono">{s.score.toLocaleString()}</b> : room.status === 'done' ? <span className="dim">did not finish</span> : <span className="dim pulse">playing…</span>}</div>
             ))}
           </div>
         )}
@@ -234,7 +247,7 @@ export function Room() {
           <div className="panel results" style={{ width: '100%', maxWidth: 560 }}>
             <h2>{room.teams ? (room.result.teamWinner === null ? 'Teams tied!' : `Team ${room.result.teamWinner ? 'B' : 'A'} wins!`) : room.result.winner ? (room.result.winner === me.id ? 'You win!' : `${room.members.find((m: any) => m.userId === room.result.winner)?.name ?? 'Opponent'} wins`) : "It's a draw"}</h2>
             {room.result.summary?.reason && <p className="dim">{room.result.summary.reason}</p>}
-            <div className="col" style={{ width: '100%' }}>{room.members.map((m: any) => <div key={m.userId} className="row" style={{ gap: 10 }}><Avatar id={m.avatar} size={26} name={m.name} /><span style={{ flex: 1, textAlign: 'left' }}>{m.name}</span><b className="mono">{Math.round(room.result.scores[m.userId] ?? 0).toLocaleString()}</b><Chip tone={room.result.outcomes[m.userId] === 'win' ? 'ok' : undefined}>{room.result.outcomes[m.userId]}</Chip></div>)}</div>
+            <div className="col" style={{ width: '100%' }}>{room.members.map((m: any) => <div key={m.userId} className="row" style={{ gap: 10 }}><Avatar id={m.avatar} size={26} name={m.name} /><span style={{ flex: 1, textAlign: 'left' }}>{m.name}</span><b className="mono">{Math.round(room.result.scores[m.userId] ?? 0).toLocaleString()}</b>{room.result.outcomes[m.userId] && <Chip tone={room.result.outcomes[m.userId] === 'win' ? 'ok' : undefined}>{room.result.outcomes[m.userId]}</Chip>}</div>)}</div>
             <div className="row">{isHost && <button className="btn btn-primary" onClick={() => send({ t: 'rematch' })}>Rematch</button>}<Link className="btn" to="/rooms">Back to rooms</Link></div>
             <p className="dim" style={{ fontSize: 12 }}>Results saved to everyone's match history.</p>
           </div>

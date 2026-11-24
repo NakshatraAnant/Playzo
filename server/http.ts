@@ -2,6 +2,7 @@ import type { FastifyRequest, FastifyReply } from 'fastify';
 import { db, Row } from './db';
 import { sha256 } from './secureRng';
 import { config } from './config';
+import { ageOn, bandFor } from './access';
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public code = 'ERROR', public extra?: Record<string, unknown>) {
@@ -29,6 +30,14 @@ export function currentUser(req: FastifyRequest): User | null {
       sha256(token), new Date().toISOString(),
     ) ?? null;
   }
+  if (user?.dob) {
+    // The age band follows the date of birth: birthdays move players from child to teen to adult automatically.
+    const band = bandFor(ageOn(user.dob));
+    if (band !== user.age_band) {
+      db().run('UPDATE users SET age_band = ? WHERE id = ?', band, user.id);
+      user.age_band = band;
+    }
+  }
   if (user && token) {
     // Track last use for the session list (at most one write per session every 5 minutes).
     const now = new Date();
@@ -36,6 +45,12 @@ export function currentUser(req: FastifyRequest): User | null {
   }
   (req as any)._user = user;
   return user;
+}
+
+/** Re-resolve the user, ignoring the per-request cache (long-lived WebSocket connections). */
+export function reloadUser(req: FastifyRequest): User | null {
+  delete (req as any)._user;
+  return currentUser(req);
 }
 
 export function requireUser(req: FastifyRequest): User {
@@ -64,9 +79,10 @@ export function oneOf<T extends string>(v: unknown, options: readonly T[], name:
 
 /* ---------------- in-memory rate limiting (per process) ---------------- */
 const buckets = new Map<string, { tokens: number; at: number }>();
-export function rateLimit(req: FastifyRequest, group: string, perMinute: number) {
+/** by: 'ip' for sign-in style endpoints, so creating fresh guest accounts never resets the limit. */
+export function rateLimit(req: FastifyRequest, group: string, perMinute: number, by: 'user' | 'ip' = 'user') {
   perMinute *= config.rateLimitMultiplier;
-  const key = `${group}:${currentUser(req)?.id ?? req.ip}`;
+  const key = `${group}:${(by === 'user' ? currentUser(req)?.id : null) ?? req.ip}`;
   const now = Date.now();
   const b = buckets.get(key) ?? { tokens: perMinute, at: now };
   b.tokens = Math.min(perMinute, b.tokens + ((now - b.at) / 60000) * perMinute);

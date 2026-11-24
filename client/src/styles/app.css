@@ -25,6 +25,9 @@ h4 { font-size: var(--fs-lg); font-weight: 700; }
 p { margin: 0; }
 :focus-visible { outline: 2px solid var(--zo-cyan); outline-offset: 2px; border-radius: 6px; }
 ::selection { background: rgba(255, 61, 139, 0.4); }
+.board-cell:focus { outline: none; }
+.board-cell:focus-visible { outline: 2px solid var(--zo-cyan); outline-offset: 1px; }
+a.sr-only:focus { width: auto; height: auto; margin: 8px; padding: 10px 14px; clip: auto; z-index: 999; background: var(--bg-2); border-radius: 12px; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); border: 0; }
 .muted { color: var(--text-2); }
 .dim { color: var(--text-3); }

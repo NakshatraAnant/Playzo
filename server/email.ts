@@ -14,7 +14,7 @@
 import { db, nowIso } from './db';
 import { config } from './config';
 
-export type Template = 'verify_email' | 'reset_password' | 'parent_consent' | 'password_changed' | 'new_sign_in' | 'account_deleted' | 'security_alert';
+export type Template = 'verify_email' | 'reset_password' | 'parent_consent' | 'password_changed' | 'new_sign_in' | 'account_deleted' | 'security_alert' | 'support_reply';
 
 interface Rendered { subject: string; text: string; html: string }
 const esc = (s: string) => s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -42,6 +42,7 @@ export function render(t: Template, v: Record<string, string>): Rendered {
     case 'password_changed': return mk('Your PLAYZO password was changed', ['Your password was just changed and other devices were signed out.', 'If this was not you, reset your password immediately.'], { label: 'Reset password', url: v.url });
     case 'new_sign_in': return mk('New sign-in to your PLAYZO account', [`A new sign-in happened at ${v.when}${v.device ? ` from ${v.device}` : ''}.`, 'If this was you, there is nothing to do.'], { label: 'Review account security', url: v.url });
     case 'account_deleted': return mk('Your PLAYZO account was deleted', ['Your account and gameplay data were permanently deleted as you requested.']);
+    case 'support_reply': return mk('PLAYZO Support replied to your request', [`There is a new reply to "${v.subject}".`], { label: 'Read the reply', url: v.url });
     case 'security_alert': return mk('PLAYZO security notice', [v.message]);
   }
 }
@@ -91,15 +92,25 @@ export function sendEmail(to: string, template: Template, vars: Record<string, s
 }
 
 const BACKOFF_MS = [0, 60_000, 5 * 60_000, 30 * 60_000, 2 * 3600_000];
+/** Messages being sent right now: the retry worker must not send them a second time. */
+const inFlight = new Set<number>();
 async function deliver(id: number) {
+  if (inFlight.has(id)) return;
+  inFlight.add(id);
+  try { await deliverOnce(id); } catch (e) { console.error('[email] delivery failed', id, e); } finally { inFlight.delete(id); }
+}
+async function deliverOnce(id: number) {
   const row = db().get<{ id: number; to_email: string; template: Template; subject: string; body: string; attempts: number; status: string }>('SELECT * FROM dev_outbox WHERE id = ?', id);
   if (!row || row.status !== 'queued') return;
   const p = activeProvider();
   if (!p.configured) return;
-  const rendered: Rendered = { subject: row.subject, text: row.body, html: layout(row.subject, row.body.split('\n\n')) };
+  // The stored text ends with "Label: https://..." when the message has a button.
+  const paras = row.body.split('\n\n');
+  const cta = paras[paras.length - 1].match(/^([^:\n]{2,40}): (https?:\/\/\S+)$/);
+  const rendered: Rendered = { subject: row.subject, text: row.body, html: cta ? layout(row.subject, paras.slice(0, -1), { label: cta[1], url: cta[2] }) : layout(row.subject, paras) };
   const r = await p.send(row.to_email, rendered);
   const attempts = row.attempts + 1;
-  if (r.ok) db().run("UPDATE dev_outbox SET status = 'sent', attempts = ?, sent_at = ?, last_error = NULL, next_attempt_at = NULL WHERE id = ?", attempts, nowIso(), id);
+  if (r.ok) db().run("UPDATE dev_outbox SET status = 'sent', body = '[delivered]', attempts = ?, sent_at = ?, last_error = NULL, next_attempt_at = NULL WHERE id = ?", attempts, nowIso(), id);
   else if (!r.retryable || attempts >= BACKOFF_MS.length) db().run("UPDATE dev_outbox SET status = 'failed', attempts = ?, last_error = ?, next_attempt_at = NULL WHERE id = ?", attempts, r.error, id);
   else db().run('UPDATE dev_outbox SET attempts = ?, last_error = ?, next_attempt_at = ? WHERE id = ?', attempts, r.error, new Date(Date.now() + BACKOFF_MS[attempts]).toISOString(), id);
 }

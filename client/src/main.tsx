@@ -1,6 +1,15 @@
-import { StrictMode, lazy, Component, ReactNode } from 'react';
+import { StrictMode, lazy, Component, ReactNode, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createBrowserRouter, RouterProvider, Link } from 'react-router-dom';
+import { createBrowserRouter, RouterProvider, Link, isRouteErrorResponse, useRouteError } from 'react-router-dom';
+// Self-hosted fonts: no third-party request ever sees a player's address.
+import '@fontsource/unbounded/latin-500.css';
+import '@fontsource/unbounded/latin-700.css';
+import '@fontsource/unbounded/latin-900.css';
+import '@fontsource/plus-jakarta-sans/latin-400.css';
+import '@fontsource/plus-jakarta-sans/latin-500.css';
+import '@fontsource/plus-jakarta-sans/latin-600.css';
+import '@fontsource/plus-jakarta-sans/latin-700.css';
+import '@fontsource/plus-jakarta-sans/latin-800.css';
 import './styles/app.css';
 import { StoreProvider } from './lib/store';
 import { Shell } from './components/Shell';
@@ -49,19 +58,27 @@ class Boundary extends Component<{ children: ReactNode }, { err: Error | null }>
   state = { err: null as Error | null };
   static getDerivedStateFromError(err: Error) { return { err }; }
   componentDidCatch(err: Error) { reportError(String(err?.message ?? err), location.pathname); }
-  render() {
-    if (this.state.err) {
-      const chunk = /dynamically imported module|Failed to fetch/i.test(this.state.err.message);
-      return (
-        <div className="empty panel" style={{ maxWidth: 520, margin: '10vh auto' }}>
-          <h3 style={{ marginBottom: 8 }}>{chunk ? 'A new version is available' : 'Something went wrong'}</h3>
-          <p className="muted" style={{ marginBottom: 16 }}>{chunk ? 'Reload to get the latest PLAYZO.' : 'The error was reported. You can reload or head home.'}</p>
-          <button className="btn btn-primary" onClick={() => location.reload()}>Reload</button>
-        </div>
-      );
-    }
-    return this.props.children;
-  }
+  render() { return this.state.err ? <Crash err={this.state.err} /> : this.props.children; }
+}
+
+function Crash({ err }: { err: Error }) {
+  const chunk = /dynamically imported module|module script|Failed to fetch|Unable to preload/i.test(err.message);
+  return (
+    <div className="empty panel" style={{ maxWidth: 520, margin: '10vh auto' }} role="alert">
+      <h3 style={{ marginBottom: 8 }}>{chunk ? 'A new version is available' : 'Something went wrong'}</h3>
+      <p className="muted" style={{ marginBottom: 16 }}>{chunk ? 'Reload to get the latest PLAYZO.' : 'The error was reported. You can reload or head home.'}</p>
+      <div className="row" style={{ justifyContent: 'center' }}><button className="btn btn-primary" onClick={() => location.reload()}>Reload</button><a className="btn" href="/">Home</a></div>
+    </div>
+  );
+}
+
+/** The router catches page crashes before Boundary can: show the real error screen and report it. */
+function RouteError() {
+  const e = useRouteError();
+  const notFound = isRouteErrorResponse(e) && e.status === 404;
+  const err = e instanceof Error ? e : new Error(String((e as any)?.statusText ?? e));
+  useEffect(() => { if (!notFound) reportError(err.message, location.pathname); }, [notFound, err.message]);
+  return notFound ? <NotFound /> : <Crash err={err} />;
 }
 
 const NotFound = () => <Empty icon="compass" title="Page not found"><Link to="/" className="btn btn-primary" style={{ marginTop: 12 }}>Go home</Link></Empty>;
@@ -69,8 +86,9 @@ const NotFound = () => <Empty icon="compass" title="Page not found"><Link to="/"
 const router = createBrowserRouter([
   {
     element: <Shell />,
-    errorElement: <Boundary><NotFound /></Boundary>,
-    children: [
+    errorElement: <RouteError />,
+    // Page errors replace only the page: the header and navigation stay usable.
+    children: [{ errorElement: <RouteError />, children: [
       { path: '/', element: <Home /> },
       { path: '/games', element: <Discover /> },
       { path: '/games/:id', element: <GameDetail /> },
@@ -103,7 +121,7 @@ const router = createBrowserRouter([
       { path: '/admin', element: <Admin /> },
       { path: '/legal/:doc', element: <Legal /> },
       { path: '*', element: <NotFound /> },
-    ],
+    ] }],
   },
 ]);
 

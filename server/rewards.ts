@@ -46,7 +46,7 @@ export async function rewardRoutes(app: FastifyInstance) {
     const u = currentUser(req);
     const season = seasonKey();
     const top = db().all(
-      `SELECT sp.user_id, sp.points, sp.games, u.display_name, u.avatar, u.level FROM season_points sp JOIN users u ON u.id = sp.user_id
+      `SELECT sp.user_id, sp.points, sp.games, u.privacy_profile, u.display_name, u.avatar, u.level FROM season_points sp JOIN users u ON u.id = sp.user_id
        WHERE sp.season = ? AND u.status = 'active' AND u.privacy_profile != 'private' ORDER BY sp.points DESC, sp.games ASC LIMIT 50`, season,
     );
     let me: { points: number; rank: number } | null = null;
@@ -56,7 +56,7 @@ export async function rewardRoutes(app: FastifyInstance) {
     }
     const now = new Date();
     const ends = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString();
-    return { season, endsAt: ends, top: top.map((r: any, i: number) => ({ rank: i + 1, userId: r.user_id, name: r.display_name, avatar: r.avatar, level: r.level, points: r.points, games: r.games, me: r.user_id === u?.id })), me };
+    return { season, endsAt: ends, top: top.map((r: any, i: number) => ({ rank: i + 1, userId: r.privacy_profile === 'public' || r.user_id === u?.id ? r.user_id : null, name: r.display_name, avatar: r.avatar, level: r.level, points: r.points, games: r.games, me: r.user_id === u?.id })), me };
   });
 
   app.get('/api/me/referrals', async (req) => {

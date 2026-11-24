@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useCtl, Hud } from '../runtime';
+import { useCtl, Hud, cellProps } from '../runtime';
 import { TurnBanner, myTurn } from './TurnBanner';
 import { sfx } from '../../lib/sound';
 
@@ -20,7 +20,7 @@ export default function HexConquest() {
       <Hud items={[['Moves', s.moves], ['Board', `${s.n}x${s.n}`]]} />
       <TurnBanner turn={turnId} colours={COL} labels={['left ↔ right', 'top ↕ bottom']} />
       <div className="board-wrap" style={{ maxWidth: 640 }}>
-        <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%' }} role="img" aria-label="Hex board">
+        <svg viewBox={`0 0 ${w} ${h}`} style={{ width: '100%' }} role="group" aria-label="Hex board">
           <line x1={pos(0)[0] - dx * 0.4} y1={2} x2={pos(s.n - 1)[0] + dx * 0.4} y2={2} stroke={COL[1]} strokeWidth={2.2} strokeLinecap="round" />
           <line x1={pos(s.n * (s.n - 1))[0] - dx * 0.4} y1={h - 2} x2={pos(s.n * s.n - 1)[0] + dx * 0.4} y2={h - 2} stroke={COL[1]} strokeWidth={2.2} strokeLinecap="round" />
           <line x1={pos(0)[0] - dx * 0.75} y1={pos(0)[1]} x2={pos(s.n * (s.n - 1))[0] - dx * 0.75} y2={pos(s.n * (s.n - 1))[1]} stroke={COL[0]} strokeWidth={2.2} strokeLinecap="round" />
@@ -29,7 +29,7 @@ export default function HexConquest() {
             const [x, y] = pos(i);
             const onPath = s.path.includes(i);
             return (
-              <g key={i} onClick={() => place(i)} style={{ cursor: can && c < 0 ? 'pointer' : 'default' }} role="button" aria-label={`Cell ${i + 1}${c >= 0 ? ` taken by ${c === 0 ? 'blue' : 'coral'}` : ''}`}>
+              <g key={i} {...cellProps(can && c < 0, `Row ${Math.floor(i / s.n) + 1} column ${(i % s.n) + 1}${c >= 0 ? ` taken by ${c === 0 ? 'blue' : 'coral'}` : ''}`, () => place(i))} className="board-cell" style={{ cursor: can && c < 0 ? 'pointer' : 'default' }}>
                 <polygon points={hex(x, y, R * 0.96)} fill={c < 0 ? '#0a3a52' : COL[c]} stroke={onPath ? '#fff' : '#7fd4ff'} strokeOpacity={onPath ? 1 : 0.35} strokeWidth={onPath ? 0.9 : 0.4} />
                 {c >= 0 && <motion.text initial={{ scale: 0 }} animate={{ scale: 1 }} x={x} y={y + 1.6} textAnchor="middle" fontSize={4.4} fill="#fff" fontWeight={900}>{c === 0 ? '◆' : '●'}</motion.text>}
                 {s.last === i && <circle cx={x} cy={y} r={R * 0.3} fill="none" stroke="#fff" strokeWidth={0.5} />}

@@ -20,7 +20,7 @@ export const COSMETICS: Cosmetic[] = [
   { id: 'theme-ocean', kind: 'theme', name: 'Deep Ocean', priceZo: 300, colors: ['#020b1a', '#3d8bff'] },
   { id: 'theme-royal', kind: 'theme', name: 'Royal Plus', priceZo: null, plusOnly: true, colors: ['#12041f', '#ffcf33'] },
 ];
-export const COSMETIC_BY_ID = Object.fromEntries(COSMETICS.map((c) => [c.id, c]));
+export const COSMETIC_BY_ID: Record<string, Cosmetic> = Object.assign(Object.create(null), Object.fromEntries(COSMETICS.map((c) => [c.id, c])));
 
 export const PLANS = [
   { id: 'plus-monthly', name: 'PLAYZO Plus - Monthly', priceInr: 99, days: 30, perks: ['No sponsored placements', 'Plus-only crown frame & Royal theme', 'Supporter badge'] },

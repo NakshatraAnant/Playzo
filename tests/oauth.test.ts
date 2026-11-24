@@ -51,8 +51,8 @@ beforeAll(async () => {
 });
 afterAll(() => idp.close());
 
-async function start(next = '/') {
-  const r = await app.inject({ method: 'GET', url: `/api/auth/oauth/google/start?next=${encodeURIComponent(next)}` });
+async function start(next = '/', cookie = '') {
+  const r = await app.inject({ method: 'GET', url: `/api/auth/oauth/google/start?next=${encodeURIComponent(next)}`, headers: cookie ? { cookie } : {} });
   expect(r.statusCode).toBe(302);
   const u = new URL(String(r.headers.location));
   expect(u.origin + u.pathname).toBe(`${ISS}/authorize`);
@@ -65,7 +65,8 @@ function issueCode(s: { nonce: string; challenge: string }, claims: Record<strin
   codes.set(code, { challenge: s.challenge, claims: { iss: ISS, aud: 'test-client.apps.local', sub: 'g-123', email: 'gplayer@gmail.test', email_verified: true, nonce: s.nonce, iat: now, exp: now + 300, ...claims } });
   return code;
 }
-const callback = (state: string, code: string, cookie = '') => app.inject({ method: 'GET', url: `/api/auth/oauth/google/callback?state=${state}&code=${code}`, headers: cookie ? { cookie } : {} });
+/** The browser that started the flow holds the state cookie; `otherBrowser` simulates a link opened elsewhere. */
+const callback = (state: string, code: string, cookie = '', otherBrowser = false) => app.inject({ method: 'GET', url: `/api/auth/oauth/google/callback?state=${state}&code=${code}`, headers: { cookie: [cookie, otherBrowser ? '' : `pz_oauth=${state}`].filter(Boolean).join('; ') } });
 const cookieOf = (r: any) => String([r.headers['set-cookie']].flat().find((c: any) => String(c).startsWith('pz_session=')) ?? '').split(';')[0];
 
 describe('Google sign-in adapter', () => {
@@ -124,7 +125,11 @@ describe('Google sign-in adapter', () => {
     const ck = cookieOf(reg);
     const s = await start();
     expect(String((await callback(s.state, issueCode(s, { sub: 'g-owner', email: 'owner@gmail.test' }))).headers.location)).toContain('oauth_error=email_exists');
-    const s2 = await start('/settings');
+    // A crafted callback link opened in the victim's browser must not link the attacker's identity (login CSRF).
+    const atk = await start('/settings');
+    expect(String((await callback(atk.state, issueCode(atk, { sub: 'g-attacker', email: 'atk@gmail.test' }), ck, true)).headers.location)).toContain('oauth_error=expired');
+    expect(db().get("SELECT 1 FROM oauth_identities WHERE subject = 'g-attacker'")).toBeUndefined();
+    const s2 = await start('/settings', ck);
     const linked = await callback(s2.state, issueCode(s2, { sub: 'g-owner', email: 'owner@gmail.test' }), ck);
     expect(String(linked.headers.location)).toContain('/settings?linked=google');
     const ids = JSON.parse((await app.inject({ method: 'GET', url: '/api/auth/identities', headers: { cookie: ck } })).body);

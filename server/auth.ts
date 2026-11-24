@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { scrypt, scryptSync, timingSafeEqual, randomBytes } from 'node:crypto';
 import { db, nowIso } from './db';
 import { config } from './config';
-import { HttpError, User, currentUser, requireUser, str, rateLimit, audit, SESSION_COOKIE } from './http';
+import { HttpError, User, currentUser, reloadUser, requireUser, str, rateLimit, audit, SESSION_COOKIE } from './http';
 import { sha256, randomToken, newId } from './secureRng';
 import { ageOn, bandFor, loungeAccess, socialPolicy, AGE_ASSURANCE_PROVIDERS, isQaPreview, loungeAgeOk, agePolicyFor } from './access';
 import { PREF_KEYS } from '../shared/preferences';
@@ -54,7 +54,7 @@ function createSession(reply: FastifyReply, userId: string, req?: FastifyRequest
   const token = randomToken(32);
   const expires = new Date(Date.now() + config.sessionDays * 86400_000);
   db().run('INSERT INTO auth_sessions (token_hash, user_id, expires_at, user_agent, last_used_at) VALUES (?, ?, ?, ?, ?)', sha256(token), userId, expires.toISOString(), deviceLabel(req?.headers['user-agent']), nowIso());
-  reply.setCookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: config.production, path: '/', expires });
+  reply.setCookie(SESSION_COOKIE, token, { httpOnly: true, sameSite: 'lax', secure: config.secureCookies, path: '/', expires });
 }
 function destroySession(req: FastifyRequest, reply: FastifyReply) {
   const token = req.cookies?.[SESSION_COOKIE];
@@ -111,13 +111,13 @@ export function publicMe(u: User) {
     premium: !!(u.premium_until && u.premium_until > nowIso()), premiumUntil: u.premium_until, privacy: u.privacy_profile, allowFriendRequests: !!u.allow_friend_requests,
     balances: { ZO: balance(u.id, 'ZO'), ...(lounge.entitled ? { CHIPS: balance(u.id, 'CHIPS') } : {}) },
     lounge, social: socialPolicy(u), loungeDailyLimitMin: u.lounge_daily_limit_min,
-    preferences: prefsOf(u), onboarded: !u.is_guest,
+    preferences: prefsOf(u), onboarded: !u.is_guest, hasPassword: !!u.password_hash,
   };
 }
 
 function validateDob(dob: unknown): string {
   const d = str(dob, 'Date of birth', 10, 10);
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || isNaN(Date.parse(d))) throw new HttpError(400, 'Date of birth must be YYYY-MM-DD', 'VALIDATION');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || isNaN(Date.parse(d)) || new Date(d).toISOString().slice(0, 10) !== d) throw new HttpError(400, 'Date of birth must be YYYY-MM-DD', 'VALIDATION');
   const age = ageOn(d);
   if (age < 4 || age > 120) throw new HttpError(400, 'Please enter a real date of birth', 'VALIDATION');
   return d;
@@ -132,11 +132,11 @@ export async function authRoutes(app: FastifyInstance) {
 
   /** Guest play: no personal data. Treated with child-safe defaults until upgraded. */
   app.post('/api/auth/guest', async (req, reply) => {
-    rateLimit(req, 'guest', 10);
+    rateLimit(req, 'guest', 10, 'ip');
     if (currentUser(req)) throw new HttpError(400, 'Already signed in', 'ALREADY');
     const id = newId('u_');
     const username = freeUsername(`${ADJ[Math.floor(Math.random() * ADJ.length)]}${NOUN[Math.floor(Math.random() * NOUN.length)]}`);
-    db().run('INSERT INTO users (id, username, display_name, is_guest, age_band, avatar) VALUES (?, ?, ?, 1, ?, ?)', id, username, username, 'unknown', `orb-${1 + Math.floor(Math.random() * 12)}`);
+    db().run('INSERT INTO users (id, username, display_name, is_guest, age_band, avatar) VALUES (?, ?, ?, 1, ?, ?)', id, username, username, 'unknown', `orb-${1 + Math.floor(Math.random() * 6)}`); // free avatars only
     db().run("INSERT INTO consents (user_id, kind, version) VALUES (?, 'terms', ?)", id, TERMS_VERSION);
     createSession(reply, id);
     track('auth_guest', id);
@@ -148,7 +148,7 @@ export async function authRoutes(app: FastifyInstance) {
    * calculation at registration and on every request, so the client cannot change the outcome.
    */
   app.post('/api/auth/age-check', async (req) => {
-    rateLimit(req, 'age-check', 30);
+    rateLimit(req, 'age-check', 30, 'ip');
     const p = agePolicyFor(validateDob((req.body as any)?.dob));
     return {
       canRegister: p.canRegister, band: p.band, loungeEligible: p.loungeEligible, loungeMinAge: p.loungeMinAge,
@@ -161,7 +161,7 @@ export async function authRoutes(app: FastifyInstance) {
 
   /** Registration (or guest upgrade, keeping progress). */
   app.post('/api/auth/register', async (req, reply) => {
-    rateLimit(req, 'auth', 10);
+    rateLimit(req, 'auth', 10, 'ip');
     const b = (req.body ?? {}) as Record<string, unknown>;
     const email = str(b.email, 'Email', 5, 160).toLowerCase();
     if (!validEmail(email)) throw new HttpError(400, 'Enter a valid email', 'VALIDATION');
@@ -189,11 +189,12 @@ export async function authRoutes(app: FastifyInstance) {
     const pwHash = password ? await hashPassword(password) : null;
     if (db().get('SELECT 1 FROM users WHERE email = ?', email)) throw new HttpError(409, 'An account with this email already exists', 'EMAIL_TAKEN');
     const existingName = db().get<{ id: string }>('SELECT id FROM users WHERE username = ?', username);
-    const guest = currentUser(req);
+    const guest = reloadUser(req); // fresh: hashing took a moment and another tab may have upgraded this guest
     if (existingName && existingName.id !== guest?.id) throw new HttpError(409, 'That username is taken', 'USERNAME_TAKEN');
     // Children get a generic display name; their chosen username stays private to friends.
     const display = band === 'child' ? username.slice(0, 1).toUpperCase() + username.slice(1, 3) + '***' : username;
-    let id: string;
+    let id = '';
+    db().tx(() => {
     if (guest && guest.is_guest) {
       id = guest.id;
       db().run('UPDATE users SET email=?, username=?, display_name=?, password_hash=?, is_guest=0, dob=?, age_band=?, parent_email=?, preferences=?' + (b.avatar ? ', avatar=?' : '') + ' WHERE id=?',
@@ -205,10 +206,12 @@ export async function authRoutes(app: FastifyInstance) {
     }
     if (oauthPeek) {
       const t = takeOauthTicket(b.oauthTicket)!;
+      if (db().get('SELECT 1 FROM oauth_identities WHERE provider = ? AND subject = ?', t.provider, t.subject)) throw new HttpError(409, 'This Google or Apple account is already linked to a player', 'OAUTH_LINKED');
       linkIdentity(id, t);
       if (t.email && t.email === email) db().run('UPDATE users SET email_verified_at = ? WHERE id = ?', nowIso(), id); // provider verified it
     }
     db().run("INSERT INTO consents (user_id, kind, version) VALUES (?, 'terms', ?), (?, 'privacy', ?)", id, TERMS_VERSION, id, TERMS_VERSION);
+    });
     const vt = issueToken(id, 'verify_email', 48);
     sendEmail(email, 'verify_email', { url: `${config.publicUrl}/verify?token=${vt}` }, id);
     if (parentEmail) {
@@ -227,7 +230,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/auth/login', async (req, reply) => {
-    rateLimit(req, 'auth', 10);
+    rateLimit(req, 'auth', 10, 'ip');
     const b = (req.body ?? {}) as Record<string, unknown>;
     const ident = str(b.identifier, 'Email or username', 3, 160);
     const password = str(b.password, 'Password', 1, 128);
@@ -276,7 +279,7 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/auth/forgot', async (req) => {
-    rateLimit(req, 'auth', 5);
+    rateLimit(req, 'forgot', 5, 'ip');
     const email = str((req.body as any)?.email, 'Email', 5, 160).toLowerCase();
     const u = db().get<User>("SELECT * FROM users WHERE email = ? AND status = 'active'", email);
     if (u) {
@@ -287,11 +290,14 @@ export async function authRoutes(app: FastifyInstance) {
   });
 
   app.post('/api/auth/reset', async (req) => {
-    rateLimit(req, 'auth', 10);
+    rateLimit(req, 'auth', 10, 'ip');
     const b = (req.body ?? {}) as Record<string, unknown>;
+    const newPw = str(b.password, 'Password', 8, 128); // check first: a too-short password must not use up the link
     const uid = consumeToken(str(b.token, 'Token', 10, 100), 'reset_password');
-    const newHash = await hashPassword(str(b.password, 'Password', 8, 128));
-    db().run('UPDATE users SET password_hash = ? WHERE id = ?', newHash, uid);
+    const newHash = await hashPassword(newPw);
+    // Following the emailed link also proves the address; every other outstanding reset link dies with this one.
+    db().run('UPDATE users SET password_hash = ?, email_verified_at = COALESCE(email_verified_at, ?) WHERE id = ?', newHash, nowIso(), uid);
+    db().run("UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND purpose = 'reset_password' AND used_at IS NULL", nowIso(), uid);
     db().run('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL', nowIso(), uid);
     const ru = db().get<{ email: string | null; username: string }>('SELECT email, username FROM users WHERE id = ?', uid);
     if (ru) { loginCleared(`login:${ru.username.toLowerCase()}`); if (ru.email) loginCleared(`login:${ru.email}`); }
@@ -302,10 +308,13 @@ export async function authRoutes(app: FastifyInstance) {
 
   app.post('/api/auth/change-password', async (req) => {
     const u = requireUser(req);
+    rateLimit(req, 'password', 6);
+    if (!u.password_hash) throw new HttpError(409, 'This account has no password yet. Use "Forgot password" to set one.', 'NO_PASSWORD');
     const b = (req.body ?? {}) as Record<string, unknown>;
     if (!(await verifyPassword(str(b.current, 'Current password', 1, 128), u.password_hash as string))) throw new HttpError(401, 'Current password is incorrect', 'BAD_CREDENTIALS');
     const changed = await hashPassword(str(b.password, 'New password', 8, 128));
     db().run('UPDATE users SET password_hash = ? WHERE id = ?', changed, u.id);
+    db().run("UPDATE auth_tokens SET used_at = ? WHERE user_id = ? AND purpose = 'reset_password' AND used_at IS NULL", nowIso(), u.id);
     // Sign out every other device; keep this one.
     const mine = req.cookies?.[SESSION_COOKIE];
     const revoked = db().run('UPDATE auth_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL AND token_hash != ?', nowIso(), u.id, mine ? sha256(mine) : '');
@@ -320,10 +329,22 @@ export async function authRoutes(app: FastifyInstance) {
     const u = requireUser(req);
     const b = (req.body ?? {}) as Record<string, unknown>;
     if (b.confirm !== 'DELETE') throw new HttpError(400, 'Type DELETE to confirm', 'VALIDATION');
-    if (!u.is_guest && !(await verifyPassword(str(b.password, 'Password', 1, 128), u.password_hash as string))) throw new HttpError(401, 'Password is incorrect', 'BAD_CREDENTIALS');
+    rateLimit(req, 'password', 6);
+    if (!u.is_guest && !u.password_hash) {
+      // Google/Apple-only accounts have no password to re-enter: a recent sign-in confirms it is really them.
+      const s = db().get<{ created_at: string }>('SELECT created_at FROM auth_sessions WHERE token_hash = ?', sha256(req.cookies[SESSION_COOKIE] ?? ''));
+      if (!s || Date.now() - Date.parse(s.created_at) > 15 * 60_000) throw new HttpError(401, 'For your safety, sign out, sign in again, then delete your account within 15 minutes.', 'REAUTH_REQUIRED');
+    } else if (!u.is_guest && !(await verifyPassword(str(b.password, 'Password', 1, 128), u.password_hash as string))) throw new HttpError(401, 'Password is incorrect', 'BAD_CREDENTIALS');
     const hashed = sha256(u.id);
     db().tx(() => {
       db().run('INSERT OR REPLACE INTO deletion_requests (user_id, requested_at, completed_at) VALUES (?, ?, ?)', hashed, nowIso(), nowIso());
+      // Rows that are not tied to the account by a cascade but still hold personal data.
+      db().run('DELETE FROM dev_outbox WHERE user_id = ? OR (to_email = ? AND ? IS NOT NULL)', u.id, u.email, u.email);
+      db().run('DELETE FROM support_tickets WHERE user_id = ?', u.id);
+      db().run('DELETE FROM client_errors WHERE user_id = ?', u.id);
+      db().run('DELETE FROM ad_impressions WHERE user_id = ?', u.id);
+      db().run('UPDATE users SET referred_by = NULL WHERE referred_by = ?', u.id);
+      for (const k of [u.username, u.email]) if (k) loginCleared(`login:${String(k).toLowerCase()}`);
       db().run('DELETE FROM users WHERE id = ?', u.id); // cascades to all user-owned rows
       db().run('UPDATE analytics_events SET user_id = NULL WHERE user_id = ?', u.id);
     });
@@ -337,7 +358,7 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/api/auth/age-assurance', async (req) => {
     const u = requireUser(req);
     const method = str((req.body as any)?.method, 'Method', 2, 40);
-    const provider = AGE_ASSURANCE_PROVIDERS[method];
+    const provider = Object.hasOwn(AGE_ASSURANCE_PROVIDERS, method) ? AGE_ASSURANCE_PROVIDERS[method] : undefined;
     if (!provider) throw new HttpError(400, 'Unknown verification method', 'VALIDATION');
     if (!loungeAgeOk(u)) throw new HttpError(403, `The PLAYZO Lounge is for players aged ${config.loungeMinAge} and over`, 'NOT_ADULT');
     // Certified providers must complete their own redirect/callback flow (see ageAssurance adapter); a bare POST never verifies anyone.
@@ -382,7 +403,8 @@ export async function authRoutes(app: FastifyInstance) {
     if (b.loungeCooloffDays !== undefined) {
       const days = Number(b.loungeCooloffDays);
       if (![1, 7, 30].includes(days)) throw new HttpError(400, 'Cool-off must be 1, 7 or 30 days', 'VALIDATION');
-      db().run('UPDATE users SET lounge_cooloff_until = ? WHERE id = ?', new Date(Date.now() + days * 86400_000).toISOString(), u.id);
+      // A cool-off can be extended, never shortened.
+      db().run('UPDATE users SET lounge_cooloff_until = MAX(COALESCE(lounge_cooloff_until, \'\'), ?) WHERE id = ?', new Date(Date.now() + days * 86400_000).toISOString(), u.id);
       audit(u.id, 'lounge.cooloff', u.id, { days });
     }
     return { user: publicMe(db().get<User>('SELECT * FROM users WHERE id = ?', u.id)!) };

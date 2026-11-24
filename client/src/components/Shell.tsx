@@ -19,7 +19,13 @@ export function Shell() {
     addEventListener('online', on); addEventListener('offline', off);
     return () => { removeEventListener('online', on); removeEventListener('offline', off); };
   }, []);
-  useEffect(() => { window.scrollTo(0, 0); trackEvent('page_view', { path: loc.pathname.replace(/\/[A-Za-z0-9_-]{12,}$/, '/:id'), source: new URLSearchParams(loc.search).get('utm_source') ?? undefined }); }, [loc.pathname, loc.search]);
+  useEffect(() => {
+    if (!loc.hash) { window.scrollTo(0, 0); return; }
+    // Deep links such as /settings#tastes: the target renders after the page loads.
+    const t = setTimeout(() => document.getElementById(loc.hash.slice(1))?.scrollIntoView({ block: 'start' }), 350);
+    return () => clearTimeout(t);
+  }, [loc.pathname, loc.search, loc.hash]);
+  useEffect(() => { trackEvent('page_view', { path: loc.pathname.replace(/\/[A-Za-z0-9_-]{12,}$/, '/:id'), source: new URLSearchParams(loc.search).get('utm_source') ?? undefined }); }, [loc.pathname, loc.search]);
   // Optional hub theme between games (off by default; Settings → Sound).
   useEffect(() => {
     const sync = () => {

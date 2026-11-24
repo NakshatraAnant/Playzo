@@ -24,6 +24,8 @@ export interface Ctl {
   /** Replay: submit the run now (used when the local state is already over). */
   finish: () => void;
   elapsed: () => number;
+  /** Live check (safe inside animation loops): is the game paused right now? */
+  isPaused: () => boolean;
   over: boolean; busy: boolean; room: RoomCtx | null; lounge: boolean;
   chips: number | null; setChips: (n: number) => void;
   sessionId: string | null; commit: string | null;
@@ -95,7 +97,7 @@ function Countdown({ onDone }: { onDone: () => void }) {
 }
 
 /* ------------------------------------------------------------------ */
-export function Results({ meta, score, completion, verified, result, onReplay, extra }: { meta: GameMeta; score: number; completion: Completion | null; verified: string; result?: any; onReplay: () => void; extra?: ReactNode }) {
+export function Results({ meta, score, completion, verified, result, onReplay, extra, difficulty }: { difficulty?: Difficulty; meta: GameMeta; score: number; completion: Completion | null; verified: string; result?: any; onReplay: () => void; extra?: ReactNode }) {
   const { me, toast } = useStore();
   const nav = useNavigate();
   const [busy, setBusy] = useState(false);
@@ -111,11 +113,11 @@ export function Results({ meta, score, completion, verified, result, onReplay, e
   const challenge = async () => {
     setBusy(true);
     try {
-      const r = await api.post<{ id: string; link: string }>('/api/challenges', { gameId: meta.id, difficulty: 'normal' });
+      const r = await api.post<{ id: string; link: string }>('/api/challenges', { gameId: meta.id, difficulty: difficulty ?? 'normal' });
       const url = `${location.origin}${r.link}`;
-      const text = `I'm on PLAYZO playing ${meta.title}. Beat my run on the exact same puzzle! Aaja PLAYZO pe khelte hain!`;
+      const text = `I'm on PLAYZO playing ${meta.title}. I challenge you to the exact same puzzle! Aaja PLAYZO pe khelte hain!`;
       if (navigator.share) await navigator.share({ title: 'PLAYZO challenge', text, url }).catch(() => undefined);
-      else { await navigator.clipboard?.writeText(`${text} ${url}`); toast('Challenge link copied', 'ok'); }
+      else { await navigator.clipboard?.writeText(`${text} ${url}`).catch(() => undefined); toast('Challenge link copied', 'ok'); }
       nav(r.link);
     } catch (e: any) { toast(e.message, 'bad'); } finally { setBusy(false); }
   };
@@ -123,7 +125,7 @@ export function Results({ meta, score, completion, verified, result, onReplay, e
     const text = `I scored ${score.toLocaleString()} in ${meta.title} on PLAYZO! Aaja PLAYZO pe khelte hain!`;
     const url = `${location.origin}/games/${meta.id}`;
     if (navigator.share) await navigator.share({ title: meta.title, text, url }).catch(() => undefined);
-    else { await navigator.clipboard?.writeText(`${text} ${url}`); toast('Copied to clipboard', 'ok'); }
+    else { await navigator.clipboard?.writeText(`${text} ${url}`).catch(() => undefined); toast('Copied to clipboard', 'ok'); }
   };
   const won = result?.winner === 'p1' || result?.winner === me?.id;
   // Recommended next game: same taste category first, ordered by the player's preferences.
@@ -188,16 +190,36 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
   const pausedAt = useRef<number | null>(null);
   const local = useRef<{ state: any; log: any[]; start: number; lastT: number } | null>(null);
   const finishing = useRef(false);
+  /** Increases on every new run: late timers from an earlier run must not touch the current one. */
+  const runId = useRef(0);
+  const submitTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const pauseRequest = useRef<Promise<unknown>>(Promise.resolve());
+  const [canRetrySubmit, setCanRetrySubmit] = useState(false);
   const tutKey = `pz-tut-${gameId}`;
+  const [tutSeen, setTutSeen] = useState(() => { try { return !!localStorage.getItem(tutKey); } catch { return false; } });
 
   useEffect(() => {
     let alive = true;
+    runId.current++;
+    clearTimeout(submitTimer.current);
+    setCanRetrySubmit(false);
+    // First visit: instructions come before the session starts, so no clock runs (and no runner crashes) while reading.
+    if (!tutSeen && !resume) { setTutorialOpen(true); setPhase('tutorial'); return; }
     (async () => {
       setPhase('loading'); setDone(null); setErr(null); finishing.current = false; setPaused(false); pausedAt.current = null;
       try {
         await ensureSession();
         let s: any = null;
-        if (resume && run === 0) { try { const r = await api.get(`/api/sessions/${resume}`); if (r.status === 'active' && r.mode === 'server' && r.gameId === gameId) s = r; } catch { /* start fresh */ } }
+        if (resume && run === 0) {
+          try {
+            const r = await api.get(`/api/sessions/${resume}`);
+            if (r.status === 'active' && r.mode === 'server' && r.gameId === gameId) {
+              // It may have been left paused (tab closed, "Quit to game page"): restart its clock first.
+              const u = await api.post(`/api/sessions/${resume}/resume`).catch(() => null);
+              s = u?.view ? { ...r, view: u.view } : r;
+            }
+          } catch { /* start fresh */ }
+        }
         if (!s) s = await api.post('/api/sessions', { gameId, difficulty, context, ref: refId });
         if (!alive) return;
         setSession(s);
@@ -208,9 +230,7 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
           local.current = { state, log: [], start: 0, lastT: 0 };
           setView(state);
         } else setView(s.view);
-        let seen = false;
-        try { seen = !!localStorage.getItem(tutKey); } catch { /* ignore */ }
-        if (!seen) { setTutorialOpen(true); setPhase('tutorial'); } else setPhase(s.mode === 'replay' ? 'countdown' : 'playing');
+        setPhase(s.mode === 'replay' ? 'countdown' : 'playing');
       } catch (e: any) {
         if (!alive) return;
         setErr(e.message); setPhase('error');
@@ -218,7 +238,8 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
     })();
     return () => { alive = false; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameId, difficulty, context, refId, run, resume]);
+  }, [gameId, difficulty, context, refId, run, resume, tutSeen]);
+  useEffect(() => () => clearTimeout(submitTimer.current), []);
 
   // Lounge: always close the session (resolving any open round by published rules) when leaving.
   useEffect(() => () => { if (session?.sessionId && meta.env === 'lounge') api.post(`/api/sessions/${session.sessionId}/end`).catch(() => undefined); }, [session?.sessionId, meta.env]);
@@ -230,20 +251,30 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
   const closeTutorial = () => {
     try { localStorage.setItem(tutKey, '1'); } catch { /* ignore */ }
     setTutorialOpen(false);
-    if (phase === 'tutorial') setPhase(session?.mode === 'replay' ? 'countdown' : 'playing');
+    if (phase === 'tutorial') setTutSeen(true); // a first visit: this starts the session
   };
 
   const submit = useCallback(async () => {
     if (!local.current || finishing.current) return;
     finishing.current = true;
+    setCanRetrySubmit(false);
     setPhase('submitting');
+    const mine = runId.current;
     try {
       const r = await api.post(`/api/sessions/${session.sessionId}/submit`, { actions: local.current.log });
+      if (mine !== runId.current) return;
       setDone({ score: r.score, completion: r.completion, result: r.result });
       setPhase('done');
       refresh();
-    } catch (e: any) { setErr(e.message); setPhase('error'); }
+    } catch (e: any) {
+      if (mine !== runId.current) return;
+      // Connection trouble: the run is still here, so it can be sent again instead of being lost.
+      if (e?.status === 0 || e?.status >= 500 || e?.status === 429) { finishing.current = false; setCanRetrySubmit(true); }
+      else if (e?.code === 'SESSION_ENDED') { void recoverRef.current(); return; }
+      setErr(e.message); setPhase('error');
+    }
   }, [session, refresh]);
+  const recoverRef = useRef<() => Promise<void>>(async () => undefined);
 
   const record = useCallback((action: any, t?: number) => {
     const L = local.current;
@@ -253,14 +284,11 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
     const a = { ...action, t: time };
     try {
       e.apply(L.state, a, { rng: new SeededRng('unused'), now: time, player: 'p1' });
-    } catch (err: any) {
-      if (err?.code === 'IMPLAUSIBLE') return false;
-      return false;
-    }
+    } catch { return false; }
     L.log.push(a);
     L.lastT = time;
     setVersion((v) => v + 1);
-    if (e.isOver(L.state)) setTimeout(submit, 350);
+    if (e.isOver(L.state)) { clearTimeout(submitTimer.current); submitTimer.current = setTimeout(submit, 350); }
     return true;
   }, [gameId, phase, submit]);
 
@@ -278,24 +306,28 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
     } catch { setErr('This session has ended.'); setPhase('error'); }
     finally { recovering.current = false; }
   }, [session]);
+  recoverRef.current = recoverEnded;
 
   const act = useCallback(async (action: any) => {
     if (!session) return null;
     if (pausedAt.current !== null) return null;
     if (action?.type !== 'tick') setBusy(true);
+    const mine = runId.current;
     try {
       const r = await api.post(`/api/sessions/${session.sessionId}/action`, { action });
+      if (mine !== runId.current) return r; // restarted meanwhile
       setView(r.view);
       setVersion((v) => v + 1);
       if (typeof r.chips === 'number') setChips(r.chips);
       if (r.over) {
         setDone((d) => (d?.completion ? d : { score: Math.max(0, Math.round(r.result?.scores?.p1 ?? 0)), completion: r.completion, result: r.result }));
-        setTimeout(() => setPhase('done'), meta.env === 'family' ? 900 : 0);
+        setTimeout(() => { if (mine === runId.current) setPhase('done'); }, meta.env === 'family' ? 900 : 0);
         refresh();
       }
       return r;
     } catch (e: any) {
-      if (e instanceof ApiError && e.code === 'SESSION_ENDED') { void recoverEnded(); }
+      if (mine !== runId.current) { /* an earlier run's request: nothing to show */ }
+      else if (e instanceof ApiError && e.code === 'SESSION_ENDED') { void recoverEnded(); }
       else if (action?.type !== 'tick') { toast(e.message, 'bad'); sfx.bad(); }
       throw e;
     } finally { if (action?.type !== 'tick') setBusy(false); }
@@ -337,12 +369,15 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
     pausedAt.current = performance.now();
     music.pause();
     setPaused(true);
-    api.post(`/api/sessions/${session.sessionId}/pause`).catch(() => undefined);
+    pauseRequest.current = api.post(`/api/sessions/${session.sessionId}/pause`).catch(() => undefined);
   }, [session, phase, meta.env, context, gameId]);
   const resumeGame = useCallback(async () => {
     if (!session || pausedAt.current === null) return;
     try {
+      await pauseRequest.current; // never let a slow pause arrive after the resume
+      if (pausedAt.current === null) return;
       const r = await api.post(`/api/sessions/${session.sessionId}/resume`);
+      if (pausedAt.current === null) return;
       if (local.current) local.current.start += performance.now() - pausedAt.current;
       pausedAt.current = null;
       music.resume();
@@ -357,11 +392,12 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
     document.addEventListener('visibilitychange', h);
     return () => document.removeEventListener('visibilitychange', h);
   }, [pause]);
-  useKeys({ Escape: () => (pausedAt.current === null ? pause() : resumeGame()) }, [pause, resumeGame]);
+  useKeys({ Escape: () => { if (!tutorialOpen && !confirmRestart) void (pausedAt.current === null ? pause() : resumeGame()); } }, [pause, resumeGame, tutorialOpen, confirmRestart]);
 
   const ctl: Ctl = useMemo(() => ({
     meta, mode: session?.mode ?? 'server', view: session?.mode === 'replay' ? local.current?.state : view, version, me: 'p1', difficulty: session?.difficulty ?? difficulty,
     act, record, finish: submit, elapsed: () => (local.current && phase === 'playing' ? (pausedAt.current ?? performance.now()) - local.current.start : 0),
+    isPaused: () => pausedAt.current !== null,
     over: phase === 'done' || phase === 'submitting', busy, room: null, lounge: meta.env === 'lounge', chips, setChips, sessionId: session?.sessionId ?? null, commit: session?.commit ?? null,
   }), [meta, session, view, version, act, record, submit, phase, busy, chips, difficulty]);
 
@@ -403,11 +439,11 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
           <div className="empty panel" style={{ maxWidth: 480 }}>
             <Icon name="info" />
             <p style={{ marginBottom: 14 }}>{err}</p>
-            <div className="row" style={{ justifyContent: 'center' }}><button className="btn btn-primary" onClick={replay}>Try again</button><Link className="btn" to="/">Home</Link></div>
+            <div className="row" style={{ justifyContent: 'center' }}>{canRetrySubmit ? <button className="btn btn-primary" onClick={() => void submit()} data-testid="retry-submit">Send my score again</button> : <button className="btn btn-primary" onClick={replay}>Try again</button>}<Link className="btn" to="/">Home</Link></div>
           </div>
         )}
         {phase === 'countdown' && <Countdown onDone={startPlay} />}
-        {(phase === 'playing' || phase === 'submitting' || phase === 'tutorial') && view && Comp && (
+        {(phase === 'playing' || phase === 'submitting') && view && Comp && (
           <CtlContext.Provider value={ctl}>
             <Suspense fallback={<div className="spinner" />}><Comp /></Suspense>
           </CtlContext.Provider>
@@ -416,7 +452,7 @@ export function GameHost({ gameId, difficulty, context = 'solo', refId, resume, 
         {phase === 'done' && !done && <div className="center" style={{ minHeight: 200 }}><div className="spinner" /><p className="dim">Loading your result…</p></div>}
         {phase === 'done' && done && (
           <>
-            <Results meta={meta} score={done.score} completion={done.completion} result={done.result}
+            <Results meta={meta} difficulty={session?.difficulty} score={done.score} completion={done.completion} result={done.result}
               verified={session?.mode === 'replay' ? 'Score verified by server replay' : 'Server-authoritative result'} onReplay={replay} extra={raceView} />
             {me?.isGuest && <p className="dim" style={{ fontSize: 13, textAlign: 'center' }}>Playing as a guest. <Link to="/register" style={{ color: 'var(--zo-cyan)' }}>Create an account</Link> to keep your progress safe and add friends.</p>}
           </>
@@ -474,7 +510,7 @@ export function RoomGame({ gameId, view, version, me, room }: { gameId: string; 
   const Comp = COMPONENTS[gameId];
   const ctl: Ctl = useMemo(() => ({
     meta, mode: 'server', view, version, me, difficulty: 'normal',
-    act: async (action: any) => { room.send({ t: 'act', action }); return null; }, record: () => false, finish: () => undefined, elapsed: () => 0,
+    act: async (action: any) => { room.send({ t: 'act', action }); return null; }, record: () => false, finish: () => undefined, elapsed: () => 0, isPaused: () => false,
     over: room.status === 'done', busy: false, room, lounge: false, chips: null, setChips: () => undefined, sessionId: null, commit: null,
   }), [meta, view, version, me, room]);
   return <CtlContext.Provider value={ctl}><Suspense fallback={<div className="spinner" />}><Comp /></Suspense></CtlContext.Provider>;
@@ -525,7 +561,7 @@ export function useKeys(map: Record<string, () => void>, deps: unknown[]) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || e.ctrlKey || e.metaKey || e.altKey) return;
       const f = map[e.key] ?? map[e.key.toLowerCase()];
       if (f) { e.preventDefault(); f(); }
     };
@@ -534,6 +570,11 @@ export function useKeys(map: Record<string, () => void>, deps: unknown[]) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, deps);
 }
+/** Makes an SVG board cell work with the keyboard and screen readers. */
+export const cellProps = (enabled: boolean, label: string, fn: () => void) => ({
+  role: 'button', 'aria-label': label, 'aria-disabled': !enabled, tabIndex: enabled ? 0 : -1, onClick: fn,
+  onKeyDown: (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); fn(); } },
+});
 export const playerName = (ctl: Ctl, id: string | null | undefined) => {
   if (!id) return '';
   if (id === 'ai') return 'Computer';

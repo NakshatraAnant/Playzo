@@ -27,13 +27,13 @@ export default function TowerTactics() {
     if (!anim) return;
     let raf = 0, last = performance.now(), acc = 0;
     const loop = (t: number) => {
-      acc += (t - last) * speed; last = t;
+      acc += ctl.isPaused() ? 0 : Math.min(250, t - last) * speed; last = t;
       const st = animRef.current!;
       let done = false;
       while (acc >= 1000 / TICK_HZ && !done) { done = stepWave(st); acc -= 1000 / TICK_HZ; }
       draw(st);
       if (done) {
-        ctl.record({ type: 'wave' });
+        if (!ctl.record({ type: 'wave' })) { raf = requestAnimationFrame(loop); return; } // paused at this exact moment: try again
         setAnim(null);
         s.over ? (s.shields > 0 ? sfx.fanfare() : sfx.lose()) : sfx.good();
         return;

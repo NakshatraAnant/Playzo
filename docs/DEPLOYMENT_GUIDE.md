@@ -1,4 +1,4 @@
-# Deployment Guide (local)
+# Deployment Guide
 
 ## Requirements
 Node.js ≥ 22.5 (tested on 24.16). No database server needed: SQLite runs inside Node. Browser tests use the Microsoft Edge that ships with Windows (no download).
@@ -57,6 +57,19 @@ See `.env.example`. Important flags:
 - `PLAYZO_EMAIL_PROVIDER` / `RESEND_API_KEY` / `PLAYZO_EMAIL_FROM` for real email delivery.
 - `PLAYZO_DEV_MODE`: dev outbox and dev attestation (QA accounts only). Refused in production.
 - To give a QA account Lounge preview access: Admin → Users → set role `tester` (and set `PLAYZO_ADULT_DEV_PREVIEW=true`, restart).
+
+## Production
+One Node process serves the app, the API and WebSockets. Put it behind a TLS proxy that forwards `Upgrade` (WebSocket) headers.
+
+```bash
+docker build --build-arg PLAYZO_PUBLIC_URL=https://your-domain -t playzo .
+docker run -d --restart unless-stopped -p 127.0.0.1:8080:8080 -v playzo-data:/data   -e PLAYZO_PUBLIC_URL=https://your-domain -e PLAYZO_TRUST_PROXY=1   -e PLAYZO_ADMIN_EMAIL=... -e PLAYZO_ADMIN_PASSWORD=...   -e PLAYZO_EMAIL_PROVIDER=resend -e RESEND_API_KEY=... -e PLAYZO_EMAIL_FROM=... playzo
+```
+- Without Docker: `npm ci && npm run build && npm start`, with the same variables in `.env`.
+- The server refuses to start in production with a non-HTTPS public URL, an admin password under 12 characters, or no build. It refuses a public address outside production.
+- `PLAYZO_TRUST_PROXY`: number of proxy hops in front. Without it, every visitor shares the proxy's address and its rate limits.
+- Run exactly one instance (rooms, rate limits and the SQLite database are per process). Backups are written next to the database; copy them off the machine.
+- Health: `GET /api/health`. Request logs: `PLAYZO_LOG_LEVEL=info`.
 
 ## Production checklist (not done; required before public launch)
 1. Managed PostgreSQL (port the migrations; see DATABASE_SCHEMA.md).

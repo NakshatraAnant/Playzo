@@ -11,8 +11,10 @@ const DOT_COLOURS = [['Red', '#ff4d5e'], ['Blue', '#3d8bff'], ['Green', '#2fd66b
 
 function opts(rng: Rng, correct: number, spread: number): { options: string[]; correct: number } {
   const set = new Set<number>([correct]);
-  while (set.size < 4) {
-    const c = correct + (rng.int(spread * 2 + 1) - spread);
+  for (let tries = 0; set.size < 4; tries++) {
+    // After many misses widen the range, so generation always terminates.
+    const reach = spread + Math.floor(tries / 40);
+    const c = correct + (rng.int(reach * 2 + 1) - reach);
     if (c >= 0 && c !== correct) set.add(c);
   }
   const arr = rng.shuffle([...set]);
@@ -33,7 +35,7 @@ const GENERATORS: ((rng: Rng) => RoundQ)[] = [
     return { tag: 'Odd One Out', prompt: 'Which one is different?', options: [0, 1, 2, 3].map((i) => (i === odd ? b : a)), correct: odd };
   },
   (rng) => {
-    const x = 5 + rng.int(40), y = 5 + rng.int(40), z = rng.int(20);
+    const x = 5 + rng.int(40), y = 5 + rng.int(40), z = rng.int(Math.min(20, x + y)); // the answer is never negative
     const o = opts(rng, x + y - z, 6);
     return { tag: 'Quick Sum', prompt: `${x} + ${y} - ${z} = ?`, ...o };
   },

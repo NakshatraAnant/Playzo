@@ -48,7 +48,7 @@ export const reflexArena: Engine<ReflexState, ReflexAction> = {
     if (s.over) throw new GameError('Run is over');
     if ('end' in a || ctx.now >= REFLEX_DURATION) { settleMisses(s, REFLEX_DURATION); s.over = true; return s; }
     settleMisses(s, ctx.now);
-    const tg = s.targets[a.i];
+    const tg = Number.isInteger(a.i) ? s.targets[a.i] : undefined;
     if (!tg) throw new GameError('Unknown target');
     if (s.hit.includes(tg.id)) throw new GameError('Already hit');
     if (ctx.now < tg.spawn + REFLEX_MIN_MS) throw new GameError('Implausibly fast hit', 'IMPLAUSIBLE');

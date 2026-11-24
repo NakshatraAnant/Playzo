@@ -51,6 +51,8 @@ export const blockBattle: Engine<BlockState, BlockAction> = {
   apply(s, a) {
     if (s.over) throw new GameError('Game over');
     if ('end' in a) { s.over = true; return s; }
+    // Whole cells only: fractional positions would miss the board and always "fit".
+    if (![a.p, a.r, a.c].every(Number.isInteger)) throw new GameError('Bad placement');
     const piece = s.hand[a.p];
     if (!piece) throw new GameError('No piece in that slot');
     if (!fits(s.board, piece.shape, a.r, a.c)) throw new GameError('Piece does not fit there');

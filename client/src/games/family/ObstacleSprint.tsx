@@ -14,14 +14,12 @@ export default function ObstacleSprint() {
   useEffect(() => {
     let raf = 0, last = performance.now(), acc = 0;
     const loop = (now: number) => {
-      acc += Math.min(250, now - last); last = now;
-      while (acc >= FRAME_MS && !s.dead) { stepFrame(s); acc -= FRAME_MS; if (s.orbsTaken && s.frame % 1 === 0) { /* orb sfx via diff below */ } }
+      // Paused: the runner stands still (time while paused is dropped, not caught up).
+      acc += ctl.isPaused() ? 0 : Math.min(250, now - last); last = now;
+      while (acc >= FRAME_MS && !s.dead) { stepFrame(s); acc -= FRAME_MS; }
       draw();
       if (s.dead && !ended.current) {
-        ended.current = true;
-        sfx.lose();
-        ctl.record({ a: 'end' }, s.frame * FRAME_MS);
-        return;
+        if (ctl.record({ a: 'end' }, s.frame * FRAME_MS)) { ended.current = true; sfx.lose(); return; }
       }
       raf = requestAnimationFrame(loop);
     };
@@ -68,7 +66,7 @@ export default function ObstacleSprint() {
     g.fillStyle = '#fff'; g.fillRect(px + PLAYER_W * U - 12, py + 8, 6, 6);
     if (s.orbsTaken > orbs.current) { sfx.coin(); orbs.current = s.orbsTaken; }
   }
-  const jump = () => { if (!s.dead && s.y === 0) { ctl.record({ a: 'jump' }, s.frame * FRAME_MS); sfx.whoosh(); } };
+  const jump = () => { if (!s.dead && s.y === 0 && !ctl.isPaused()) { ctl.record({ a: 'jump' }, s.frame * FRAME_MS); sfx.whoosh(); } };
   const duck = (on: boolean) => { if (!s.dead && s.ducking !== on) ctl.record({ a: on ? 'duck' : 'unduck' }, s.frame * FRAME_MS); };
   useKeys({ ' ': jump, ArrowUp: jump, w: jump }, [s]);
   useEffect(() => {
@@ -84,7 +82,7 @@ export default function ObstacleSprint() {
         <canvas ref={canvas} width={820} height={420} style={{ width: '100%', borderRadius: 18, display: 'block' }} role="img" aria-label="Rooftop runner" />
         <div style={{ position: 'absolute', inset: 0, display: 'grid', gridTemplateRows: '1fr 1fr' }}>
           <button aria-label="Jump" onPointerDown={(e) => { e.preventDefault(); jump(); }} style={{ background: 'transparent', border: 0 }} />
-          <button aria-label="Duck (hold)" onPointerDown={(e) => { e.preventDefault(); duck(true); }} onPointerUp={() => duck(false)} onPointerLeave={() => duck(false)} style={{ background: 'transparent', border: 0 }} />
+          <button aria-label="Duck (hold)" onPointerDown={(e) => { e.preventDefault(); duck(true); }} onPointerUp={() => duck(false)} onPointerLeave={() => duck(false)} onPointerCancel={() => duck(false)} style={{ background: 'transparent', border: 0 }} />
         </div>
       </div>
       <p className="dim" style={{ fontSize: 13 }}>Tap top half / Space to jump · Hold bottom half / ↓ to duck</p>

@@ -15,7 +15,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { createHash, createPrivateKey, createPublicKey, randomBytes, sign as cryptoSign, verify as cryptoVerify, KeyObject } from 'node:crypto';
 import { db } from './db';
 import { config } from './config';
-import { HttpError, currentUser, audit } from './http';
+import { HttpError, currentUser, audit, rateLimit } from './http';
 import { track } from './analytics';
 
 export type ProviderId = 'google' | 'apple';
@@ -49,9 +49,11 @@ export const PROVIDERS: Record<ProviderId, OidcProvider> = {
 export const providerConfigured = (p: ProviderId) => !!(PROVIDERS[p].clientId() && PROVIDERS[p].clientSecret());
 
 /* Short-lived, single-use state (10 min). Single-process by design, like rooms' memory cache. */
-const pending = new Map<string, { provider: ProviderId; verifier: string; nonce: string; next: string; at: number }>();
+const pending = new Map<string, { provider: ProviderId; verifier: string; nonce: string; next: string; userId: string | null; at: number }>();
 const tickets = new Map<string, { provider: ProviderId; subject: string; email: string | null; at: number }>();
 setInterval(() => { const cut = Date.now() - 10 * 60_000; for (const m of [pending, tickets]) for (const [k, v] of m) if (v.at < cut) m.delete(k); }, 60_000).unref();
+/** The state must come back to the browser that started the flow; otherwise a crafted link could link an attacker's identity to a victim's account. */
+const STATE_COOKIE = 'pz_oauth';
 const safeNext = (n: unknown) => (typeof n === 'string' && /^\/(?!\/)[\w\-/?=&.%]*$/.test(n) ? n : '/');
 
 /* ---------------- ID token verification ---------------- */
@@ -103,7 +105,7 @@ export function linkIdentity(userId: string, v: { provider: ProviderId; subject:
 export async function oauthRoutes(app: FastifyInstance, opts: { createSession: (reply: FastifyReply, userId: string, req?: FastifyRequest) => void }) {
   const prov = (req: FastifyRequest) => {
     const id = (req.params as any).provider as ProviderId;
-    if (!PROVIDERS[id]) throw new HttpError(404, 'Unknown provider', 'NOT_FOUND');
+    if (!Object.hasOwn(PROVIDERS, id)) throw new HttpError(404, 'Unknown provider', 'NOT_FOUND');
     if (!providerConfigured(id)) throw new HttpError(501, `${id === 'google' ? 'Google' : 'Apple'} sign-in is not configured on this server`, 'NOT_CONFIGURED');
     return PROVIDERS[id];
   };
@@ -111,8 +113,12 @@ export async function oauthRoutes(app: FastifyInstance, opts: { createSession: (
 
   app.get('/api/auth/oauth/:provider/start', async (req, reply) => {
     const p = prov(req);
+    rateLimit(req, 'oauth', 20, 'ip');
+    const me = currentUser(req);
     const state = b64url(randomBytes(24)), nonce = b64url(randomBytes(16)), verifier = b64url(randomBytes(32));
-    pending.set(state, { provider: p.id, verifier, nonce, next: safeNext((req.query as any).next), at: Date.now() });
+    pending.set(state, { provider: p.id, verifier, nonce, next: safeNext((req.query as any).next), userId: me && !me.is_guest ? me.id : null, at: Date.now() });
+    // Apple answers with a cross-site POST, which only carries SameSite=None cookies (HTTPS only).
+    reply.setCookie(STATE_COOKIE, state, { httpOnly: true, path: '/api/auth/oauth', maxAge: 600, secure: config.secureCookies, sameSite: p.responseMode === 'form_post' && config.secureCookies ? 'none' : 'lax' });
     const q = new URLSearchParams({
       client_id: p.clientId(), redirect_uri: redirectUri(p), response_type: 'code', scope: p.scope, state, nonce,
       code_challenge: b64url(createHash('sha256').update(verifier).digest()), code_challenge_method: 'S256',
@@ -127,25 +133,28 @@ export async function oauthRoutes(app: FastifyInstance, opts: { createSession: (
     const fail = (why: string) => reply.redirect(`/login?oauth_error=${encodeURIComponent(why)}`, 302);
     if (src?.error) return fail(src.error === 'access_denied' || src.error === 'user_cancelled_authorize' ? 'cancelled' : 'provider_error');
     const st = pending.get(String(src?.state ?? ''));
-    if (!st || st.provider !== p.id) return fail('expired');
+    if (!st || st.provider !== p.id || req.cookies[STATE_COOKIE] !== String(src.state)) return fail('expired');
     pending.delete(String(src.state)); // single use
+    reply.clearCookie(STATE_COOKIE, { path: '/api/auth/oauth' });
     const tok = await fetch(p.tokenUrl, {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, signal: AbortSignal.timeout(10_000),
       body: new URLSearchParams({ grant_type: 'authorization_code', code: String(src.code ?? ''), redirect_uri: redirectUri(p), client_id: p.clientId(), client_secret: p.clientSecret(), code_verifier: st.verifier }),
     }).catch(() => null);
     if (!tok || !tok.ok) return fail('exchange_failed');
-    const idToken = ((await tok.json()) as any).id_token;
+    const idToken = ((await tok.json().catch(() => ({}))) as any).id_token;
     let ident: { subject: string; email: string | null };
     try { ident = await verifyIdToken(p, String(idToken ?? ''), st.nonce); } catch { return fail('invalid_token'); }
-    const known = db().get<{ user_id: string }>("SELECT i.user_id FROM oauth_identities i JOIN users u ON u.id = i.user_id WHERE i.provider = ? AND i.subject = ? AND u.status = 'active'", p.id, ident.subject);
+    const known = db().get<{ user_id: string; status: string }>('SELECT i.user_id, u.status FROM oauth_identities i JOIN users u ON u.id = i.user_id WHERE i.provider = ? AND i.subject = ?', p.id, ident.subject);
+    if (known && known.status !== 'active') return fail('suspended');
+    if (known && st.userId && known.user_id !== st.userId) return fail('linked_elsewhere');
     if (known) {
       opts.createSession(reply, known.user_id, req);
       track('auth_login', known.user_id, { via: p.id });
       return reply.redirect(st.next, 302);
     }
     // Signed in already (password account): link the identity to it.
-    const me = currentUser(req);
-    if (me && !me.is_guest) {
+    const me = st.userId ? db().get<{ id: string }>("SELECT id FROM users WHERE id = ? AND status = 'active'", st.userId) : null;
+    if (me) {
       linkIdentity(me.id, { provider: p.id, ...ident });
       audit(me.id, 'auth.oauth_linked', me.id, { provider: p.id });
       return reply.redirect('/settings?linked=' + p.id, 302);

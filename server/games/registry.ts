@@ -54,7 +54,7 @@ const ALL: Engine[] = [
   ...SLOT_ENGINES, plinko, diceArena, hiLo, mines, crashFlight,
 ] as Engine[];
 
-export const ENGINES: Record<string, Engine> = {};
+export const ENGINES: Record<string, Engine> = Object.create(null);
 for (const e of ALL) {
   const co = closeOut[e.id] as ((e: Engine, s: any, ctx: Ctx) => any) | undefined;
   ENGINES[e.id] = co && typeof e.finalize !== 'function' ? { ...e, finalize: (s, ctx) => co(e, s, ctx) } : e;

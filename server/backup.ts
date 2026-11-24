@@ -9,7 +9,8 @@ import { db, restoreRequestFile } from './db';
 import { DatabaseSync } from 'node:sqlite';
 import { config } from './config';
 
-export const BACKUP_DIR = path.resolve('data/backups');
+/** Next to the database (db.ts looks for staged restores in the same place). */
+export const BACKUP_DIR = config.dbPath === ':memory:' ? path.resolve('data/backups') : path.join(path.dirname(path.resolve(config.dbPath)), 'backups');
 const KEEP = 14, EVERY_MS = 24 * 3600_000;
 
 export function backupNow(): string {

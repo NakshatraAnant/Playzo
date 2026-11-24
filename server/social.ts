@@ -8,12 +8,14 @@ import { unlock, streak } from './progression';
 import { hooks } from './sessions';
 import { BY_ID } from '../shared/catalogue';
 import { DIFFICULTIES, Difficulty } from '../shared/engine';
-import { ENGINES } from './games/registry';
+
 import { track } from './analytics';
 
 const pair = (a: string, b: string): [string, string] => (a < b ? [a, b] : [b, a]);
 export const isBlocked = (a: string, b: string) => !!db().get('SELECT 1 FROM blocks WHERE (blocker = ? AND blocked = ?) OR (blocker = ? AND blocked = ?)', a, b, b, a);
 export const areFriends = (a: string, b: string) => { const [x, y] = pair(a, b); return !!db().get("SELECT 1 FROM friendships WHERE user_a = ? AND user_b = ? AND status = 'accepted'", x, y); };
+
+const challengeStatus = (c: { status: string; expires_at: string }) => (c.status === 'open' && c.expires_at < nowIso() ? 'expired' : c.status);
 
 function card(u: User, viewer: User | null) {
   return { id: u.id, name: u.display_name, avatar: u.avatar, frame: u.frame, level: u.level, friend: viewer ? areFriends(u.id, viewer.id) : false };
@@ -77,7 +79,7 @@ export async function socialRoutes(app: FastifyInstance) {
     const u = requireUser(req);
     rateLimit(req, 'friend-req', 20);
     if (!socialPolicy(u).canSendFriendRequests) throw new HttpError(403, u.is_guest ? 'Create an account to add friends' : 'A parent or guardian must approve friends first', 'FORBIDDEN');
-    const t = db().get<User>("SELECT * FROM users WHERE (id = ? OR username = ?) AND status = 'active' AND is_guest = 0", (req.body as any)?.userId ?? '', (req.body as any)?.username ?? '');
+    const t = db().get<User>("SELECT * FROM users WHERE (id = ? OR username = ?) AND status = 'active' AND is_guest = 0", String((req.body as any)?.userId ?? ''), String((req.body as any)?.username ?? ''));
     if (!t || t.id === u.id || isBlocked(u.id, t.id)) throw new HttpError(404, 'Player not found', 'NOT_FOUND');
     if (!t.allow_friend_requests) throw new HttpError(403, 'This player is not accepting friend requests', 'FORBIDDEN');
     const adultMix = (u.age_band === 'adult') !== (t.age_band === 'adult');
@@ -92,6 +94,7 @@ export async function socialRoutes(app: FastifyInstance) {
       notify(t.id, 'friend', `${u.display_name} accepted your friend request`, undefined, '/friends');
       return { status: 'accepted' };
     }
+    if (ex) return { status: 'pending' }; // already asked: no second notification
     db().run("INSERT OR IGNORE INTO friendships (user_a, user_b, status, requested_by) VALUES (?, ?, 'pending', ?)", a, b, u.id);
     notify(t.id, 'friend', `${u.display_name} sent you a friend request`, 'Open Friends to accept or decline.', '/friends');
     track('friend_request', u.id);
@@ -124,6 +127,7 @@ export async function socialRoutes(app: FastifyInstance) {
     const u = requireUser(req);
     const other = str((req.body as any)?.userId, 'User', 3, 64);
     if (other === u.id) throw new HttpError(400, 'You cannot block yourself', 'VALIDATION');
+    if (!db().get('SELECT 1 FROM users WHERE id = ?', other)) throw new HttpError(404, 'Player not found', 'NOT_FOUND');
     const [a, b] = pair(u.id, other);
     db().run('DELETE FROM friendships WHERE user_a = ? AND user_b = ?', a, b);
     db().run('INSERT OR IGNORE INTO blocks (blocker, blocked) VALUES (?, ?)', u.id, other);
@@ -176,7 +180,7 @@ export async function socialRoutes(app: FastifyInstance) {
       `SELECT c.*, fu.display_name AS from_name, tu.display_name AS to_name FROM challenges c JOIN users fu ON fu.id = c.from_user LEFT JOIN users tu ON tu.id = c.to_user
        WHERE (c.from_user = ? OR c.to_user = ?) ORDER BY c.created_at DESC LIMIT 30`, u.id, u.id,
     );
-    return { challenges: rows.map((r: any) => ({ ...r, seed: undefined })) };
+    return { challenges: rows.map((r: any) => ({ ...r, seed: undefined, status: challengeStatus(r) })) };
   });
 
   app.get('/api/challenges/:id', async (req) => {
@@ -184,7 +188,7 @@ export async function socialRoutes(app: FastifyInstance) {
     const c = db().get<any>('SELECT c.*, fu.display_name AS from_name FROM challenges c JOIN users fu ON fu.id = c.from_user WHERE c.id = ?', (req.params as any).id);
     if (!c) throw new HttpError(404, 'Challenge not found', 'NOT_FOUND');
     if (c.to_user && viewer && viewer.id !== c.to_user && viewer.id !== c.from_user) throw new HttpError(404, 'Challenge not found', 'NOT_FOUND');
-    return { challenge: { id: c.id, gameId: c.game_id, difficulty: c.difficulty, fromName: c.from_name, fromScore: c.from_score, toScore: c.to_score, status: c.status, expiresAt: c.expires_at, mine: viewer?.id === c.from_user } };
+    return { challenge: { id: c.id, gameId: c.game_id, difficulty: c.difficulty, fromName: c.from_name, fromScore: c.from_score, toScore: c.to_score, status: challengeStatus(c), expiresAt: c.expires_at, mine: viewer?.id === c.from_user } };
   });
 
   hooks.challengeSeed = (id, userId, gameId) => {
@@ -204,5 +208,5 @@ export async function socialRoutes(app: FastifyInstance) {
     const after = db().get<any>('SELECT * FROM challenges WHERE id = ?', id);
     if (after.from_score !== null && after.to_score !== null) db().run("UPDATE challenges SET status = 'completed' WHERE id = ?", id);
   };
-  void ENGINES;
+
 }

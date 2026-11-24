@@ -88,7 +88,7 @@ export function PublicProfile() {
           <div className="col">
             {!p.friend && <button className="btn btn-primary" onClick={add}><Icon name="plus" />Add friend</button>}
             <button className="btn btn-ghost btn-sm" onClick={() => setReport(true)}>Report</button>
-            <button className="btn btn-ghost btn-sm" onClick={async () => { if (confirm('Block this player? They will not be able to join your rooms or send requests.')) { await api.post('/api/block', { userId: p.id }); toast('Player blocked', 'ok'); } }}>Block</button>
+            <button className="btn btn-ghost btn-sm" onClick={async () => { if (confirm('Block this player? They will not be able to join your rooms or send requests.')) { try { await api.post('/api/block', { userId: p.id }); toast('Player blocked', 'ok'); } catch (e: any) { toast(e.message, 'bad'); } } }}>Block</button>
           </div>
         )}
       </div>
@@ -111,13 +111,15 @@ export function PublicProfile() {
 export function Friends() {
   useTitle('Friends');
   const { me, toast } = useStore();
-  const { data, reload } = useAsync(() => (me ? api.get('/api/friends') : Promise.resolve(null)), [me?.id]);
+  const { data, error, reload } = useAsync(() => (me ? api.get('/api/friends') : Promise.resolve(null)), [me?.id]);
   const [q, setQ] = useState('');
   const [results, setResults] = useState<any[]>([]);
   if (!me) return <Empty icon="heart" title="Sign in to add friends"><Link className="btn btn-primary" to="/login" style={{ marginTop: 12 }}>Sign in</Link></Empty>;
   if (me.isGuest) return <Empty icon="heart" title="Create an account to add friends">Guests can still join rooms with a code. <Link className="btn btn-primary" to="/register" style={{ marginTop: 12 }}>Create account</Link></Empty>;
   const search = async () => { try { const r = await api.get(`/api/users/search?q=${encodeURIComponent(q)}`); setResults(r.users); } catch (e: any) { toast(e.message, 'bad'); } };
-  const respond = async (userId: string, accept: boolean) => { await api.post('/api/friends/respond', { userId, accept }); sfx.select(); reload(); };
+  const run = async (url: string, body: object) => { try { await api.post(url, body); sfx.select(); } catch (e: any) { toast(e.message, 'bad'); } reload(); };
+  const respond = (userId: string, accept: boolean) => run('/api/friends/respond', { userId, accept });
+  if (error && !data) return <ErrorBox message={error} retry={reload} />;
   return (
     <div className="stack" style={{ maxWidth: 760 }}>
       <h1 style={{ fontSize: 'var(--fs-2xl)' }}>Friends</h1>
@@ -131,11 +133,11 @@ export function Friends() {
       {data?.incoming?.length > 0 && <div className="panel"><div className="panel-title"><h3>Requests</h3></div>{data.incoming.map((u: any) => <div key={u.id} className="row" style={{ gap: 10, padding: '4px 0' }}><Avatar id={u.avatar} size={30} name={u.name} /><span style={{ flex: 1 }}>{u.name}</span><button className="btn btn-sm btn-primary" onClick={() => respond(u.id, true)}>Accept</button><button className="btn btn-sm" onClick={() => respond(u.id, false)}>Decline</button></div>)}</div>}
       <div className="panel">
         <div className="panel-title"><Icon name="heart" /><h3>Your friends ({data?.friends?.length ?? 0})</h3></div>
-        {data?.friends?.length ? data.friends.map((u: any) => <div key={u.id} className="row" style={{ gap: 10, padding: '4px 0' }}><Avatar id={u.avatar} size={32} name={u.name} /><Link to={`/u/${u.id}`} style={{ flex: 1 }}>{u.name} <span className="dim">Lv {u.level}</span></Link><button className="btn btn-sm btn-ghost" onClick={async () => { if (confirm(`Remove ${u.name}?`)) { await api.post('/api/friends/remove', { userId: u.id }); reload(); } }}>Remove</button></div>) : <p className="dim">No friends yet.</p>}
+        {data?.friends?.length ? data.friends.map((u: any) => <div key={u.id} className="row" style={{ gap: 10, padding: '4px 0' }}><Avatar id={u.avatar} size={32} name={u.name} /><Link to={`/u/${u.id}`} style={{ flex: 1 }}>{u.name} <span className="dim">Lv {u.level}</span></Link><button className="btn btn-sm btn-ghost" onClick={() => { if (confirm(`Remove ${u.name}?`)) void run('/api/friends/remove', { userId: u.id }); }}>Remove</button></div>) : <p className="dim">No friends yet.</p>}
         {data?.outgoing?.length > 0 && <p className="dim" style={{ fontSize: 13, marginTop: 8 }}>Pending: {data.outgoing.map((u: any) => u.name).join(', ')}</p>}
       </div>
       {data?.activity?.length > 0 && <div className="panel"><div className="panel-title"><h3>Recent friend activity</h3></div>{data.activity.map((a: any, i: number) => <div key={i} className="row" style={{ gap: 8, fontSize: 14, padding: '3px 0' }}><Avatar id={a.avatar} size={24} name={a.display_name} /><span><b>{a.display_name}</b> scored {a.score?.toLocaleString()} in {BY_ID[a.game_id]?.title}</span></div>)}</div>}
-      {data?.blocked?.length > 0 && <div className="panel"><div className="panel-title"><h3>Blocked</h3></div>{data.blocked.map((u: any) => <div key={u.id} className="row" style={{ gap: 10 }}><span style={{ flex: 1 }}>{u.name}</span><button className="btn btn-sm" onClick={async () => { await api.post('/api/unblock', { userId: u.id }); reload(); }}>Unblock</button></div>)}</div>}
+      {data?.blocked?.length > 0 && <div className="panel"><div className="panel-title"><h3>Blocked</h3></div>{data.blocked.map((u: any) => <div key={u.id} className="row" style={{ gap: 10 }}><span style={{ flex: 1 }}>{u.name}</span><button className="btn btn-sm" onClick={() => void run('/api/unblock', { userId: u.id })}>Unblock</button></div>)}</div>}
     </div>
   );
 }
@@ -143,8 +145,9 @@ export function Friends() {
 export function Missions() {
   useTitle('Missions');
   const { me, toast, refresh } = useStore();
-  const { data, reload } = useAsync(() => (me ? api.get('/api/missions') : Promise.resolve(null)), [me?.id]);
+  const { data, error, reload } = useAsync(() => (me ? api.get('/api/missions') : Promise.resolve(null)), [me?.id]);
   if (!me) return <Empty icon="target" title="Play a game to start missions"><Link className="btn btn-primary" to="/games" style={{ marginTop: 12 }}>Find a game</Link></Empty>;
+  if (error && !data) return <ErrorBox message={error} retry={reload} />;
   const claim = async (id: string) => { try { const r = await api.post(`/api/missions/${id}/claim`); toast(`+${r.zo} ZO`, 'reward'); sfx.coin(); reload(); refresh(); } catch (e: any) { toast(e.message, 'bad'); } };
   const List = ({ items }: { items: any[] }) => (
     <div className="col">{items.map((m) => (
@@ -168,9 +171,10 @@ export function Missions() {
 export function Shop() {
   useTitle('Shop');
   const { me, setMe, toast, refresh } = useStore();
-  const { data, reload } = useAsync(() => api.get('/api/shop'), [me?.id]);
+  const { data, error, reload } = useAsync(() => api.get('/api/shop'), [me?.id]);
   const [plan, setPlan] = useState<any>(null);
   const [ack, setAck] = useState(false);
+  if (error && !data) return <ErrorBox message={error} retry={reload} />;
   if (!data) return <div className="spinner" />;
   const buy = async (id: string) => { try { await api.post('/api/shop/buy', { itemId: id }); sfx.coin(); toast('Unlocked!', 'reward'); reload(); refresh(); } catch (e: any) { toast(e.message, 'bad'); } };
   const equip = async (id: string) => { try { const r = await api.post('/api/shop/equip', { itemId: id }); setMe(r.user); sfx.select(); reload(); } catch (e: any) { toast(e.message, 'bad'); } };
@@ -206,7 +210,7 @@ export function Shop() {
           ))}
         </div>
         <p className="dim" style={{ fontSize: 12, marginTop: 10 }}>{data.payments.note}{me && !me.social.canPurchase ? ' Purchases are limited to adult account holders.' : ''}</p>
-        {me?.premium && <button className="btn btn-ghost btn-sm" onClick={async () => { await api.post('/api/shop/cancel'); refresh(); toast('Membership cancelled'); }}>Cancel membership</button>}
+        {me?.premium && <button className="btn btn-ghost btn-sm" onClick={async () => { try { await api.post('/api/shop/cancel'); refresh(); reload(); toast('Membership cancelled'); } catch (e: any) { toast(e.message, 'bad'); } }}>Cancel membership</button>}
       </section>
       <Modal open={!!plan} onClose={() => setPlan(null)} title="Test checkout">
         <div className="lounge-banner dev" style={{ marginBottom: 12 }}><Icon name="info" />TEST MODE: no payment is taken and no money moves. Real payments are disabled pending approvals.</div>

@@ -113,7 +113,7 @@ function bumpMissions(userId: string, e: MissionEvent) {
 
 export function claimMission(userId: string, missionId: string) {
   const def = [...dailyMissions(), ...weeklyMissions()].find((m) => m.id === missionId);
-  if (!def) throw new Error('Unknown mission');
+  if (!def) return { ok: false, reason: 'This mission is no longer active' };
   if (!isEnabled('mission', missionId)) return { ok: false, reason: 'This mission is not available right now' };
   const period = def.period === 'daily' ? dayKey() : weekKey();
   return db().tx(() => {
@@ -128,7 +128,10 @@ export function claimMission(userId: string, missionId: string) {
 
 /* ---------------- streaks ---------------- */
 export function streak(userId: string): number {
-  const days = db().all<{ d: string }>("SELECT DISTINCT substr(started_at,1,10) AS d FROM game_sessions WHERE user_id = ? AND status = 'completed' ORDER BY d DESC LIMIT 60", userId).map((r) => r.d);
+  // Family play only (the Lounge never feeds streaks); live room matches count too.
+  const days = db().all<{ d: string }>(
+    `SELECT d FROM (SELECT substr(started_at,1,10) AS d FROM game_sessions WHERE user_id = ? AND status = 'completed' AND env = 'family'
+     UNION SELECT substr(m.created_at,1,10) FROM match_players mp JOIN matches m ON m.id = mp.match_id WHERE mp.user_id = ?) ORDER BY d DESC LIMIT 400`, userId, userId).map((r) => r.d);
   let n = 0;
   let cur = new Date();
   if (days[0] !== dayKey(cur)) cur = new Date(Date.now() - 86400_000);
@@ -163,7 +166,7 @@ export function recordCompletion(c: CompletionInput): CompletionOutput {
     const prev = db().get<{ plays: number; best_score: number }>('SELECT plays, best_score FROM game_stats WHERE user_id = ? AND game_id = ?', c.userId, c.gameId);
     const newGame = !prev;
     const rankable = c.rankable !== false;
-    out.personalBest = rankable && (!prev || c.score > prev.best_score);
+    out.personalBest = rankable && c.score > 0 && (!prev || c.score > prev.best_score);
     db().run(
       `INSERT INTO game_stats (user_id, game_id, plays, wins, best_score, total_score, mastery_xp, last_played_at) VALUES (?, ?, 1, ?, ?, ?, ?, ?)
        ON CONFLICT(user_id, game_id) DO UPDATE SET plays = plays + 1, wins = wins + excluded.wins, best_score = MAX(best_score, excluded.best_score),

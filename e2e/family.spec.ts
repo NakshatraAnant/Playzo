@@ -42,7 +42,7 @@ async function pokeGame(page: Page, clicks = 4) {
   let done = 0;
   for (let i = 0; i < n && done < clicks; i++) {
     const b = buttons.nth(i);
-    const label = ((await b.getAttribute('aria-label')) ?? (await b.innerText().catch(() => ''))).trim();
+    const label = ((await b.getAttribute('aria-label', { timeout: 2000 }).catch(() => null)) ?? (await b.innerText({ timeout: 2000 }).catch(() => ''))).trim();
     if (SKIP_CONTROLS.test(label) || !(await b.isVisible().catch(() => false))) continue;
     await b.click({ timeout: 2000 }).catch(() => undefined);
     done++;

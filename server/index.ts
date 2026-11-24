@@ -1,12 +1,19 @@
 import { buildApp } from './app';
-import { config } from './config';
+import { config, configProblems } from './config';
 import { db } from './db';
 
-const app = await buildApp({ logger: false });
+const { errors, warnings } = configProblems();
+for (const w of warnings) console.warn(`[config] WARNING: ${w}`);
+if (errors.length) {
+  for (const e of errors) console.error(`[config] ERROR: ${e}`);
+  process.exit(1);
+}
+
+const app = await buildApp({ logger: !!config.logLevel });
 // 'localhost' binds both loopback addresses (127.0.0.1 and ::1): local-only, and no slow IPv6-to-IPv4
 // fallback when a browser resolves localhost to ::1 first (that cost ~200 ms per connection on Windows).
-await app.listen({ port: config.apiPort, host: 'localhost' });
-console.log(`[playzo] API listening on http://localhost:${config.apiPort}  (health: /api/health, devMode=${config.devMode}, adultDevPreview=${config.adultDevPreview})`);
+await app.listen({ port: config.apiPort, host: config.host });
+console.log(`[playzo] API listening on http://${config.host}:${config.apiPort}  (health: /api/health, devMode=${config.devMode}, adultDevPreview=${config.adultDevPreview})`);
 
 /** Graceful shutdown: stop accepting work, flush live rooms (onClose hook), checkpoint the WAL, close the DB. */
 let closing = false;

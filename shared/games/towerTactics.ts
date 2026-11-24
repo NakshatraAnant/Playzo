@@ -137,9 +137,9 @@ export const towerTactics: Engine<TowerState, TowerAction> = {
   },
   apply(s, a) {
     if (s.over) throw new GameError('Battle finished');
-    if (a.type === 'end') { finish(s); return s; }
+    if (a.type === 'end') { s.over = true; return s; } // leaving early keeps wave points; the shield and gem bonus is for finishing
     if (a.type === 'build') {
-      const spec = TOWERS[a.kind];
+      const spec = typeof a.kind === 'string' && Object.hasOwn(TOWERS, a.kind) ? TOWERS[a.kind] : undefined;
       if (!spec) throw new GameError('Unknown tower');
       if (!canBuild(s, a.x, a.y)) throw new GameError('Cannot build there');
       if (s.gems < spec.cost) throw new GameError('Not enough gems');

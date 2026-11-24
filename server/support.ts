@@ -103,7 +103,7 @@ export async function supportRoutes(app: FastifyInstance) {
     audit(staff.id, 'admin.support_update', id, { status, replied: !!message });
     if (t.user_id && message) {
       notify(t.user_id, 'system', 'PLAYZO Support replied', `Re: ${t.subject}`, `/support/${id}`);
-      if (t.email) sendEmail(t.email, 'security_alert', { message: `PLAYZO Support replied to your request "${t.subject}". Read it at ${config.publicUrl}/support/${id}` }, t.user_id);
+      if (t.email) sendEmail(t.email, 'support_reply', { subject: t.subject, url: `${config.publicUrl}/support/${id}` }, t.user_id);
     } else if (t.user_id && status) notify(t.user_id, 'system', `Your request is now ${status.replace('_', ' ')}`, t.subject, `/support/${id}`);
     return { ok: true };
   });
